@@ -2,28 +2,22 @@
 import { reactive, ref, onMounted } from 'vue'
 
 /* ---------------- State ---------------- */
-const login = reactive({ isLoggedIn: false, user: 'demo' })
-
 const ui = reactive({
-  showLogin: false,
-  showConfig: false,
-  showApi: false,
-  lastUpdate: 'Just now',
-  notificationOpen: false
+  lastUpdate: 'Just now'
 })
 
 const config = reactive({
-  sailboatName: 'BURRASCA', // ← selected boat for front side
-  displayName: 'BURRASCA Performance Dashboard',
+  sailboatName: 'MOAT', // Selected boat
+  displayName: 'Giorgio Armani Superyacht Regatta — MOAT',
   ownerName: '',
-  sailNumber: '',
-  boatClass: 'ORC International',
+  sailNumber: 'GBR-4737',
+  boatClass: 'Superyacht',
   backgroundImage: null
 })
 
 const latestRace = reactive({
-  name: 'Chios to Andros',
-  date: 'Pending',
+  name: 'Race 3 — 31/05/2025',
+  date: '31/05/2025',
   position: '—',
   finishTime: '—',
   toFirst: '—',
@@ -33,28 +27,22 @@ const latestRace = reactive({
 })
 
 const series = reactive({
-  className: 'ORC International',
-  racesLabel: '0 entries',
+  className: 'Superyacht',
+  racesLabel: 'Entries: —',
   position: '—',
   points: '—',
   net: '—',
   rows: []
 })
 
-const raceHistory = ref([])
 const metrics = reactive({ overallEfficiency: 0, vmgUp: 0, vmgDown: 0, polarBsp: 0 })
 const flip = reactive({ latest: false, series: false })
 
 /* ---------------- Background helpers ---------------- */
 function setBodyBackground (url) {
   const b = document.body
-  if (url) {
-    b.classList.add('custom-background')
-    b.style.backgroundImage = `url('${url}')`
-  } else {
-    b.classList.remove('custom-background')
-    b.style.backgroundImage = ''
-  }
+  if (url) { b.classList.add('custom-background'); b.style.backgroundImage = `url('${url}')` }
+  else { b.classList.remove('custom-background'); b.style.backgroundImage = '' }
 }
 function applyStoredBackground () {
   const saved = localStorage.getItem('bg-image')
@@ -76,11 +64,8 @@ function resetBackground () {
   localStorage.removeItem('bg-image')
   setBodyBackground('')
 }
-function manualRefresh () {
-  ui.lastUpdate = new Date().toLocaleString()
-}
 
-/* ---------------- Liquid bubbles ---------------- */
+/* ---------------- Liquid bubbles (visual only) ---------------- */
 function setLiquid (id, pct) {
   const el = document.getElementById(id)
   if (!el) return
@@ -91,7 +76,6 @@ function setLiquid (id, pct) {
 
 /* ---------------- Time helpers ---------------- */
 function parseTimeToSeconds(t) {
-  // Accepts "hh:mm:ss" or "mm:ss"; returns null for DNF/invalid
   if (!t || String(t).toUpperCase() === 'DNF') return null
   const parts = t.split(':').map(n => parseInt(n, 10))
   if (parts.some(isNaN)) return null
@@ -108,10 +92,14 @@ function formatDelta(seconds) {
   return `${sign}${m}:${String(s).padStart(2, '0')}`
 }
 
-/* ---------------- ORC fetch (your API) ---------------- */
-const EVENT_ID = 'andros2025'
-const CLASS_ID = '1'
-const RACE_ID  = '7'   // ← per your request
+/* ---------------- ORC fetch (your API) ----------------
+   Event: mgouq (Giorgio Armani Superyacht Regatta)
+   Class: Superyacht -> classId "SY"
+   Latest race used: Race 3 -> raceId "6"
+------------------------------------------------------- */
+const EVENT_ID = 'mgouq'
+const CLASS_ID = 'SY'
+const RACE_ID  = '6'
 
 async function fetchOverall () {
   try {
@@ -123,21 +111,19 @@ async function fetchOverall () {
     const data = await res.json()
     if (!data.success || data.resultType !== 'overall') throw new Error(data.message || 'Failed overall')
 
-    // Back of Overall flip (simple mapping)
-    series.rows = data.results.map(r => ({
+    series.rows = (data.results || []).map(r => ({
       pos: r.position,
       boat: r.name,
-      r1: r.points,     // extend parser if you parse per-race columns
-      r2: '',
-      r3: '',
+      r1: r.R1 ?? r.points,   // extend your parser if you want explicit R1/R2/R3 columns
+      r2: r.R2 ?? '',
+      r3: r.R3 ?? '',
       tot: r.total ?? r.points,
       net: r.total ?? r.points
     }))
 
-    const mine = series.rows.find(x => (x.boat || '').toUpperCase().includes((config.sailboatName || '').toUpperCase()))
-               || series.rows[0]
-    series.className  = 'ORC International'
-    series.racesLabel = `Entries: ${series.rows.length}`
+    const mine = series.rows.find(x => (x.boat || '').toUpperCase().includes((config.sailboatName || '').toUpperCase())) || series.rows[0]
+    series.className  = 'Superyacht'
+    series.racesLabel = `Entries: ${series.rows.length || '—'}`
     series.position   = mine?.pos ?? '—'
     series.points     = mine?.tot ?? '—'
     series.net        = mine?.net ?? '—'
@@ -157,7 +143,6 @@ async function fetchRace () {
     const data = await res.json()
     if (!data.success || data.resultType !== 'race') throw new Error(data.message || 'Failed race')
 
-    // Normalize rows + compute corrected seconds
     const rows = (data.results || [])
       .map(r => {
         const correctedS = parseTimeToSeconds(r.correctedTime)
@@ -170,11 +155,8 @@ async function fetchRace () {
         }
       })
       .filter(r => r.pos && !isNaN(parseInt(r.pos, 10)))
+      .sort((a, b) => parseInt(a.pos, 10) - parseInt(b.pos, 10))
 
-    // Sort by numeric position (safety)
-    rows.sort((a, b) => parseInt(a.pos, 10) - parseInt(b.pos, 10))
-
-    // Compute Δ corrected time to first
     const first = rows.find(r => r.correctedS != null)
     const firstS = first?.correctedS ?? null
     for (const r of rows) {
@@ -184,29 +166,19 @@ async function fetchRace () {
 
     latestRace.rows = rows
 
-    // Front side for selected boat
-    const idx = rows.findIndex(r =>
-      (r.name || '').toUpperCase().includes((config.sailboatName || '').toUpperCase())
-    )
+    // Front side for MOAT (selected boat)
+    const idx = rows.findIndex(r => (r.name || '').toUpperCase().includes((config.sailboatName || '').toUpperCase()))
     const me = idx >= 0 ? rows[idx] : rows[0]
 
     latestRace.position   = me?.pos ?? '—'
     latestRace.finishTime = me?.finish || '—'
     latestRace.toFirst    = me?.deltaToFirst ?? '—'
-
-    // Δ corrected to boat ahead (current - previous)
-    if (idx > 0 && me?.correctedS != null && rows[idx - 1]?.correctedS != null) {
-      latestRace.deltaAhead = formatDelta(me.correctedS - rows[idx - 1].correctedS)
-    } else {
-      latestRace.deltaAhead = '—'
-    }
-
-    // Δ corrected to boat behind (next - current)
-    if (idx >= 0 && idx < rows.length - 1 && me?.correctedS != null && rows[idx + 1]?.correctedS != null) {
-      latestRace.deltaBehind = formatDelta(rows[idx + 1].correctedS - me.correctedS)
-    } else {
-      latestRace.deltaBehind = '—'
-    }
+    latestRace.deltaAhead = (idx > 0 && me?.correctedS != null && rows[idx-1]?.correctedS != null)
+      ? formatDelta(me.correctedS - rows[idx-1].correctedS)
+      : '—'
+    latestRace.deltaBehind = (idx >= 0 && idx < rows.length - 1 && me?.correctedS != null && rows[idx+1]?.correctedS != null)
+      ? formatDelta(rows[idx+1].correctedS - me.correctedS)
+      : '—'
 
     ui.lastUpdate = new Date().toLocaleString()
   } catch (err) {
@@ -217,14 +189,13 @@ async function fetchRace () {
 /* ---------------- Lifecycle ---------------- */
 onMounted(() => {
   applyStoredBackground()
-  raceHistory.value = [{ id: 1, name: 'Chios to Andros', status: 'Upcoming', when: 'Aug 2025' }]
 
-  // demo metric animation
+  // visual-only demo numbers for bubbles
   requestAnimationFrame(() => {
-    metrics.overallEfficiency = 72; setLiquid('efficiencyBubble', 72)
-    metrics.vmgUp = 65;            setLiquid('vmgUpBubble', 65)
-    metrics.vmgDown = 81;          setLiquid('vmgDownBubble', 81)
-    metrics.polarBsp = 58;         setLiquid('polarBspBubble', 58)
+    metrics.overallEfficiency = 85; setLiquid('efficiencyBubble', 85)
+    metrics.vmgUp = 78;            setLiquid('vmgUpBubble', 78)
+    metrics.vmgDown = 88;          setLiquid('vmgDownBubble', 88)
+    metrics.polarBsp = 82;         setLiquid('polarBspBubble', 82)
   })
 
   fetchOverall()
@@ -235,16 +206,16 @@ onMounted(() => {
 <template>
   <div class="container">
     <header class="header">
-      <h1>{{ config.sailboatName }}</h1>
-      <p>Vue 3 • Glassmorphism • Flip Cards</p>
+      <h1>{{ config.displayName }}</h1>
+      <p>Porto Cervo — 27/5/2025 to 31/5/2025 • Boat: {{ config.sailboatName }} ({{ config.sailNumber }})</p>
     </header>
 
     <!-- Controls / background (glass) -->
     <section class="glass-card">
       <div class="row-sb">
         <div>
-          <div class="muted tiny">Boat</div>
-          <div class="current">{{ config.sailboatName }} • {{ config.boatClass }}</div>
+          <div class="muted tiny">Class</div>
+          <div class="current">{{ series.className }}</div>
         </div>
         <div class="row">
           <label class="pill">
@@ -252,7 +223,6 @@ onMounted(() => {
             <input type="file" accept="image/*" class="hidden-file" @change="pickBackground" />
           </label>
           <button class="pill" @click="resetBackground">Reset</button>
-          <button class="pill primary" @click="manualRefresh">Refresh</button>
         </div>
       </div>
     </section>
@@ -299,7 +269,6 @@ onMounted(() => {
             <div class="back-header">Full Latest Race Results</div>
             <div v-if="!latestRace.rows.length" class="muted tiny">Pending…</div>
 
-            <!-- header row -->
             <div class="race-result-row header-row">
               <div class="position-cell">Pos</div>
               <div class="boat-name-cell">Boat</div>
@@ -308,7 +277,6 @@ onMounted(() => {
               <div class="delta-cell mono">Δ to 1st</div>
             </div>
 
-            <!-- data rows -->
             <div v-for="(r,i) in latestRace.rows" :key="i" class="race-result-row">
               <div class="position-cell">{{ r.pos }}</div>
               <div class="boat-name-cell">{{ r.name }}</div>
@@ -325,7 +293,7 @@ onMounted(() => {
     <section class="glass-card">
       <div class="row-sb mb1">
         <h3 class="title">Series Overall — {{ series.className }}</h3>
-        <button class="pill" @click="fetchOverall">Reload Overall</button>
+        <div class="muted tiny">{{ series.racesLabel }}</div>
       </div>
 
       <div class="flip-card"
@@ -368,7 +336,7 @@ onMounted(() => {
       </div>
     </section>
 
-    <!-- Metrics bubbles (glass + liquid) -->
+    <!-- Metrics bubbles (visuals) -->
     <section class="metrics-grid">
       <div class="glass-card metric-card">
         <div class="metric-title">Overall Efficiency</div>
