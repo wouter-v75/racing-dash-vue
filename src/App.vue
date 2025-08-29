@@ -13,7 +13,7 @@ const ui = reactive({
 })
 
 const config = reactive({
-  sailboatName: 'BURRASCA',
+  sailboatName: 'BURRASCA', // ← selected boat for front side
   displayName: 'BURRASCA Performance Dashboard',
   ownerName: '',
   sailNumber: '',
@@ -24,20 +24,20 @@ const config = reactive({
 const latestRace = reactive({
   name: 'Chios to Andros',
   date: 'Pending',
-  position: 'TBD',
-  finishTime: '-',
-  toFirst: '-',
-  deltaAhead: '-',
-  deltaBehind: '-',
-  rows: []
+  position: '—',
+  finishTime: '—',
+  toFirst: '—',
+  deltaAhead: '—',
+  deltaBehind: '—',
+  rows: [] // {pos, name, finish, corrected, deltaToFirst, correctedS, deltaToFirstS}
 })
 
 const series = reactive({
   className: 'ORC International',
   racesLabel: '0 entries',
-  position: 'TBD',
-  points: '0.0',
-  net: '0.0',
+  position: '—',
+  points: '—',
+  net: '—',
   rows: []
 })
 
@@ -45,7 +45,7 @@ const raceHistory = ref([])
 const metrics = reactive({ overallEfficiency: 0, vmgUp: 0, vmgDown: 0, polarBsp: 0 })
 const flip = reactive({ latest: false, series: false })
 
-/* ---------------- Helpers ---------------- */
+/* ---------------- Background helpers ---------------- */
 function setBodyBackground (url) {
   const b = document.body
   if (url) {
@@ -80,29 +80,6 @@ function manualRefresh () {
   ui.lastUpdate = new Date().toLocaleString()
 }
 
-// ---- time helpers ) ----
-function parseTimeToSeconds(t) {
-  // accepts "hh:mm:ss", "mm:ss", "h:mm:ss", or "DNF"/empty
-  if (!t || t.toUpperCase() === 'DNF') return null
-  const parts = t.split(':').map(n => parseInt(n, 10))
-  if (parts.some(isNaN)) return null
-  let s = 0
-  if (parts.length === 3) s = parts[0] * 3600 + parts[1] * 60 + parts[2]
-  else if (parts.length === 2) s = parts[0] * 60 + parts[1]
-  else return null
-  return s
-}
-function formatDelta(seconds) {
-  // returns "+m:ss" or "—"
-  if (seconds == null) return '—'
-  const sign = seconds >= 0 ? '+' : '-'
-  const abs = Math.abs(seconds)
-  const m = Math.floor(abs / 60)
-  const s = Math.floor(abs % 60)
-  return `${sign}${m}:${String(s).padStart(2, '0')}`
-}
-
-  
 /* ---------------- Liquid bubbles ---------------- */
 function setLiquid (id, pct) {
   const el = document.getElementById(id)
@@ -112,10 +89,29 @@ function setLiquid (id, pct) {
   fill.classList.add('animate')
 }
 
+/* ---------------- Time helpers ---------------- */
+function parseTimeToSeconds(t) {
+  // Accepts "hh:mm:ss" or "mm:ss"; returns null for DNF/invalid
+  if (!t || String(t).toUpperCase() === 'DNF') return null
+  const parts = t.split(':').map(n => parseInt(n, 10))
+  if (parts.some(isNaN)) return null
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  return null
+}
+function formatDelta(seconds) {
+  if (seconds == null) return '—'
+  const sign = seconds >= 0 ? '+' : '-'
+  const abs = Math.abs(seconds)
+  const m = Math.floor(abs / 60)
+  const s = Math.floor(abs % 60)
+  return `${sign}${m}:${String(s).padStart(2, '0')}`
+}
+
 /* ---------------- ORC fetch (your API) ---------------- */
-const EVENT_ID = 'andros2025' // ORC event id
-const CLASS_ID = '1'          // ORC class id
-const RACE_ID  = ''           // set when known, e.g. "1"
+const EVENT_ID = 'andros2025'
+const CLASS_ID = '1'
+const RACE_ID  = '7'   // ← per your request
 
 async function fetchOverall () {
   try {
@@ -125,20 +121,19 @@ async function fetchOverall () {
       body: JSON.stringify({ eventId: EVENT_ID, classId: CLASS_ID })
     })
     const data = await res.json()
-    if (!data.success || data.resultType !== 'overall') throw new Error(data.message || 'Failed to get overall')
+    if (!data.success || data.resultType !== 'overall') throw new Error(data.message || 'Failed overall')
 
-    // Back of flip card
+    // Back of Overall flip (simple mapping)
     series.rows = data.results.map(r => ({
       pos: r.position,
       boat: r.name,
-      r1: r.points,          // extend parser if you capture per-race cols
+      r1: r.points,     // extend parser if you parse per-race columns
       r2: '',
       r3: '',
       tot: r.total ?? r.points,
       net: r.total ?? r.points
     }))
 
-    // Front KPIs
     const mine = series.rows.find(x => (x.boat || '').toUpperCase().includes((config.sailboatName || '').toUpperCase()))
                || series.rows[0]
     series.className  = 'ORC International'
@@ -153,7 +148,6 @@ async function fetchOverall () {
 }
 
 async function fetchRace () {
-  if (!RACE_ID) return
   try {
     const res = await fetch('/api/fetch-results', {
       method: 'POST',
@@ -161,24 +155,60 @@ async function fetchRace () {
       body: JSON.stringify({ eventId: EVENT_ID, raceId: RACE_ID })
     })
     const data = await res.json()
-    if (!data.success || data.resultType !== 'race') throw new Error(data.message || 'Failed to get race')
+    if (!data.success || data.resultType !== 'race') throw new Error(data.message || 'Failed race')
 
-    // Back of flip card
-    latestRace.rows = data.results.map(r => ({
-      pos: r.position,
-      name: r.name,
-      time: r.correctedTime || r.finishTime || '',
-      toFirst: '',  // populate if you compute deltas
-      delta: r.elapsed || ''
-    }))
+    // Normalize rows + compute corrected seconds
+    const rows = (data.results || [])
+      .map(r => {
+        const correctedS = parseTimeToSeconds(r.correctedTime)
+        return {
+          pos: r.position,
+          name: r.name,
+          finish: r.finishTime || '',
+          corrected: r.correctedTime || '',
+          correctedS
+        }
+      })
+      .filter(r => r.pos && !isNaN(parseInt(r.pos, 10)))
 
-    // Front KPIs (winner or our boat)
-    const winner = latestRace.rows[0]
-    const mine = latestRace.rows.find(x => (x.name || '').toUpperCase().includes((config.sailboatName || '').toUpperCase())) || winner
-    latestRace.position   = mine?.pos ?? '—'
-    latestRace.finishTime = mine?.time ?? '—'
-    latestRace.toFirst    = winner ? (mine === winner ? '—' : '') : '—'
-    ui.lastUpdate         = new Date().toLocaleString()
+    // Sort by numeric position (safety)
+    rows.sort((a, b) => parseInt(a.pos, 10) - parseInt(b.pos, 10))
+
+    // Compute Δ corrected time to first
+    const first = rows.find(r => r.correctedS != null)
+    const firstS = first?.correctedS ?? null
+    for (const r of rows) {
+      r.deltaToFirstS = (r.correctedS != null && firstS != null) ? (r.correctedS - firstS) : null
+      r.deltaToFirst  = formatDelta(r.deltaToFirstS)
+    }
+
+    latestRace.rows = rows
+
+    // Front side for selected boat
+    const idx = rows.findIndex(r =>
+      (r.name || '').toUpperCase().includes((config.sailboatName || '').toUpperCase())
+    )
+    const me = idx >= 0 ? rows[idx] : rows[0]
+
+    latestRace.position   = me?.pos ?? '—'
+    latestRace.finishTime = me?.finish || '—'
+    latestRace.toFirst    = me?.deltaToFirst ?? '—'
+
+    // Δ corrected to boat ahead (current - previous)
+    if (idx > 0 && me?.correctedS != null && rows[idx - 1]?.correctedS != null) {
+      latestRace.deltaAhead = formatDelta(me.correctedS - rows[idx - 1].correctedS)
+    } else {
+      latestRace.deltaAhead = '—'
+    }
+
+    // Δ corrected to boat behind (next - current)
+    if (idx >= 0 && idx < rows.length - 1 && me?.correctedS != null && rows[idx + 1]?.correctedS != null) {
+      latestRace.deltaBehind = formatDelta(rows[idx + 1].correctedS - me.correctedS)
+    } else {
+      latestRace.deltaBehind = '—'
+    }
+
+    ui.lastUpdate = new Date().toLocaleString()
   } catch (err) {
     console.error('fetchRace:', err)
   }
@@ -187,10 +217,9 @@ async function fetchRace () {
 /* ---------------- Lifecycle ---------------- */
 onMounted(() => {
   applyStoredBackground()
-  // seed a history card
   raceHistory.value = [{ id: 1, name: 'Chios to Andros', status: 'Upcoming', when: 'Aug 2025' }]
 
-  // demo metric animation after mount
+  // demo metric animation
   requestAnimationFrame(() => {
     metrics.overallEfficiency = 72; setLiquid('efficiencyBubble', 72)
     metrics.vmgUp = 65;            setLiquid('vmgUpBubble', 65)
@@ -198,7 +227,6 @@ onMounted(() => {
     metrics.polarBsp = 58;         setLiquid('polarBspBubble', 58)
   })
 
-  // auto-fetch
   fetchOverall()
   fetchRace()
 })
@@ -242,7 +270,7 @@ onMounted(() => {
         <div class="flip-inner" :class="{ flipped: flip.latest }">
           <!-- front -->
           <div class="flip-front pad">
-            <div class="front-content">
+            <div class="front-content five">
               <div class="kpi">
                 <div class="kpi-label">Position</div>
                 <div class="kpi-value">{{ latestRace.position }}</div>
@@ -252,21 +280,41 @@ onMounted(() => {
                 <div class="kpi-value mono">{{ latestRace.finishTime }}</div>
               </div>
               <div class="kpi">
-                <div class="kpi-label">To 1st</div>
+                <div class="kpi-label">Δ Corrected to 1st</div>
                 <div class="kpi-delta">{{ latestRace.toFirst }}</div>
+              </div>
+              <div class="kpi">
+                <div class="kpi-label">Δ Corrected Ahead</div>
+                <div class="kpi-delta">{{ latestRace.deltaAhead }}</div>
+              </div>
+              <div class="kpi">
+                <div class="kpi-label">Δ Corrected Behind</div>
+                <div class="kpi-delta">{{ latestRace.deltaBehind }}</div>
               </div>
             </div>
           </div>
+
           <!-- back -->
           <div class="flip-back">
             <div class="back-header">Full Latest Race Results</div>
             <div v-if="!latestRace.rows.length" class="muted tiny">Pending…</div>
+
+            <!-- header row -->
+            <div class="race-result-row header-row">
+              <div class="position-cell">Pos</div>
+              <div class="boat-name-cell">Boat</div>
+              <div class="time-cell mono">Finish</div>
+              <div class="time-cell mono">Corrected</div>
+              <div class="delta-cell mono">Δ to 1st</div>
+            </div>
+
+            <!-- data rows -->
             <div v-for="(r,i) in latestRace.rows" :key="i" class="race-result-row">
               <div class="position-cell">{{ r.pos }}</div>
               <div class="boat-name-cell">{{ r.name }}</div>
-              <div class="time-cell mono">{{ r.time }}</div>
-              <div class="delta-cell mono">{{ r.toFirst }}</div>
-              <div class="delta-cell mono">{{ r.delta }}</div>
+              <div class="time-cell mono">{{ r.finish }}</div>
+              <div class="time-cell mono">{{ r.corrected }}</div>
+              <div class="delta-cell mono">{{ r.deltaToFirst }}</div>
             </div>
           </div>
         </div>
@@ -301,6 +349,7 @@ onMounted(() => {
               </div>
             </div>
           </div>
+
           <!-- back -->
           <div class="flip-back">
             <div class="back-header">Overall Standings</div>
@@ -402,22 +451,28 @@ body.custom-background{background-size:cover;background-position:center;backgrou
 
 /* Flip cards */
 .flip-card{perspective:1000px}
-.flip-inner{position:relative;transform-style:preserve-3d;transition:transform .6s;min-height:140px}
+.flip-inner{position:relative;transform-style:preserve-3d;transition:transform .6s;min-height:160px}
 .flip-inner.flipped{transform:rotateY(180deg)}
 .flip-front,.flip-back{position:absolute;inset:0;border-radius:12px;backface-visibility:hidden;overflow:hidden}
 .flip-front{background:rgba(255,255,255,.06)}
 .flip-back{background:rgba(255,255,255,.16);transform:rotateY(180deg);padding:12px}
 .pad{padding:12px}
 .front-content{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.front-content.five{grid-template-columns:repeat(5,1fr)}
 .kpi-label{font-size:12px;color:rgba(255,255,255,.75)}
 .kpi-value{font-weight:700;font-size:22px;color:#fff}
-.kpi-delta{font-weight:600;color:#ff8c42}
+.kpi-delta{font-weight:700;color:#ffcc88}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
-.back-header{font-weight:600;margin-bottom:8px;color:#fff}
-.race-result-row{display:grid;grid-template-columns:.8fr 2fr 1.2fr 1.2fr 1fr;gap:.25rem;margin-bottom:.25rem;padding:.25rem;border-radius:4px;font-size:.75rem;color:#fff}
-.position-cell,.time-cell,.delta-cell{text-align:center}
+.back-header{font-weight:700;margin-bottom:8px;color:#fff;text-align:center}
 
-/* Standings back */
+/* Latest race table (back) */
+.race-result-row{display:grid;grid-template-columns:.8fr 2fr 1.2fr 1.2fr 1.2fr;gap:.35rem;margin-bottom:.25rem;padding:.35rem;border-radius:6px;font-size:.8rem;color:#fff;align-items:center;transition:.2s}
+.race-result-row:hover{background:rgba(255,255,255,.08)}
+.header-row{font-weight:700;opacity:.95;background:rgba(255,255,255,.08)}
+.position-cell,.time-cell,.delta-cell{text-align:center}
+.boat-name-cell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Series (back) */
 .standings-row{display:grid;grid-template-columns:.8fr 2.5fr 1fr 1fr 1fr 1fr 1fr;gap:.5rem;margin-bottom:.5rem;padding:.5rem;border-radius:6px;font-size:.75rem;color:#fff;align-items:center}
 .standings-position{text-align:center;font-weight:700}
 .standings-boat{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
