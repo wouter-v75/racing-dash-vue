@@ -4,9 +4,5 @@
     "api/**/*.js": {
       "runtime": "nodejs20.x"
     }
-  },
-  "framework": "vite",
-  "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist"
+  }
 }
