@@ -80,6 +80,29 @@ function manualRefresh () {
   ui.lastUpdate = new Date().toLocaleString()
 }
 
+// ---- time helpers ) ----
+function parseTimeToSeconds(t) {
+  // accepts "hh:mm:ss", "mm:ss", "h:mm:ss", or "DNF"/empty
+  if (!t || t.toUpperCase() === 'DNF') return null
+  const parts = t.split(':').map(n => parseInt(n, 10))
+  if (parts.some(isNaN)) return null
+  let s = 0
+  if (parts.length === 3) s = parts[0] * 3600 + parts[1] * 60 + parts[2]
+  else if (parts.length === 2) s = parts[0] * 60 + parts[1]
+  else return null
+  return s
+}
+function formatDelta(seconds) {
+  // returns "+m:ss" or "—"
+  if (seconds == null) return '—'
+  const sign = seconds >= 0 ? '+' : '-'
+  const abs = Math.abs(seconds)
+  const m = Math.floor(abs / 60)
+  const s = Math.floor(abs % 60)
+  return `${sign}${m}:${String(s).padStart(2, '0')}`
+}
+
+  
 /* ---------------- Liquid bubbles ---------------- */
 function setLiquid (id, pct) {
   const el = document.getElementById(id)
