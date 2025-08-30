@@ -1,8 +1,30 @@
 <script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from './lib/supabase'
+
 const router = useRouter()
-async function logout(){
+const firstName = ref('')
+let unsub = null
+
+async function loadUser() {
+  const { data } = await supabase.auth.getUser()
+  const meta = data?.user?.user_metadata || {}
+  firstName.value = meta.first_name || ''
+}
+
+onMounted(async () => {
+  await loadUser()
+  unsub = supabase.auth.onAuthStateChange((_event, _session) => {
+    loadUser()
+  }).data?.subscription
+})
+
+onBeforeUnmount(() => {
+  unsub?.unsubscribe?.()
+})
+
+async function logout() {
   await supabase.auth.signOut()
   router.push('/login')
 }
@@ -10,7 +32,6 @@ async function logout(){
 
 <template>
   <div class="app">
-    <!-- Navigation -->
     <header class="navbar">
       <nav>
         <router-link to="/results">Results</router-link>
@@ -18,11 +39,12 @@ async function logout(){
         <router-link to="/performance">Performance</router-link>
       </nav>
 
-      <!-- Logout button -->
-      <button class="logout-btn" @click="logout">Log out</button>
+      <div class="nav-right">
+        <span v-if="firstName" class="hello">Hi, {{ firstName }}</span>
+        <button class="logout-btn" @click="logout">Log out</button>
+      </div>
     </header>
 
-    <!-- Routed views -->
     <main class="content">
       <router-view />
     </main>
@@ -30,54 +52,20 @@ async function logout(){
 </template>
 
 <style scoped>
-.app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  font-family: sans-serif;
-}
-
+.app { display:flex; flex-direction:column; height:100vh; font-family:sans-serif; }
 .navbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #1a1a1a;
-  color: #fff;
-  padding: 0.75rem 1rem;
+  display:flex; justify-content:space-between; align-items:center;
+  background:#1a1a1a; color:#fff; padding:.75rem 1rem;
 }
-
-.navbar nav {
-  display: flex;
-  gap: 1rem;
-}
-
-.navbar a {
-  color: #fff;
-  text-decoration: none;
-}
-
-.navbar a.router-link-active {
-  font-weight: bold;
-  text-decoration: underline;
-}
-
+.navbar nav { display:flex; gap:1rem; }
+.navbar a { color:#fff; text-decoration:none; }
+.navbar a.router-link-active { font-weight:700; text-decoration:underline; }
+.nav-right { display:flex; gap:.75rem; align-items:center; }
+.hello { opacity:.9; }
 .logout-btn {
-  background: #e63946;
-  border: none;
-  padding: 0.5rem 1rem;
-  color: white;
-  font-weight: bold;
-  border-radius: 4px;
-  cursor: pointer;
+  background:#e63946; border:none; padding:.5rem 1rem; color:white;
+  font-weight:700; border-radius:6px; cursor:pointer;
 }
-
-.logout-btn:hover {
-  background: #d62828;
-}
-
-.content {
-  flex: 1;
-  padding: 1rem;
-  overflow-y: auto;
-}
+.logout-btn:hover { background:#d62828; }
+.content { flex:1; padding:1rem; overflow-y:auto; }
 </style>
