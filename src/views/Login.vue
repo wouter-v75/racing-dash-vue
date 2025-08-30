@@ -53,7 +53,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '../lib/supabase'
 
@@ -66,9 +66,26 @@ const loading = ref(false)
 const error = ref('')
 const notice = ref('')
 
+let unsub = null
+
 onMounted(async () => {
+  // 1) If a session already exists (e.g., returned from email link), go in.
   const { data } = await supabase.auth.getSession()
-  if (data.session) router.replace('/results')
+  if (data.session) {
+    router.replace('/results')
+    return
+  }
+
+  // 2) Listen for auth changes (email verification or magic link redirect sets session here)
+  unsub = supabase.auth.onAuthStateChange((_event, session) => {
+    if (session) {
+      router.replace('/results')
+    }
+  }).data?.subscription
+})
+
+onBeforeUnmount(() => {
+  unsub?.unsubscribe?.()
 })
 
 function setMode(m) {
@@ -86,9 +103,7 @@ async function submit () {
       const { error: e } = await supabase.auth.signUp({
         email: email.value,
         password: password.value,
-        options: {
-          emailRedirectTo: window.location.origin
-        }
+        options: { emailRedirectTo: window.location.origin }
       })
       if (e) throw e
       notice.value = 'Check your inbox to confirm your email, then sign in.'
@@ -98,21 +113,23 @@ async function submit () {
     if (mode.value === 'magic') {
       const { error: e } = await supabase.auth.signInWithOtp({
         email: email.value,
-        options: {
-          emailRedirectTo: window.location.origin
-        }
+        options: { emailRedirectTo: window.location.origin }
       })
       if (e) throw e
       notice.value = 'Magic link sent. Check your email.'
       return
     }
 
-    const { error: e2 } = await supabase.auth.signInWithPassword({
+    // Password login → wait for session, then route
+    const { data, error: e2 } = await supabase.auth.signInWithPassword({
       email: email.value,
       password: password.value
     })
     if (e2) throw e2
-    router.push('/results')
+
+    // safety: confirm session before routing (avoids guard race)
+    const { data: s } = await supabase.auth.getSession()
+    if (s.session) router.replace('/results')
   } catch (e) {
     const msg = e?.message || String(e)
     if (/Email not confirmed/i.test(msg)) {
@@ -120,7 +137,7 @@ async function submit () {
     } else if (/Invalid login credentials/i.test(msg)) {
       error.value = 'Invalid email or password.'
     } else if (/redirect/i.test(msg)) {
-      error.value = 'Redirect URL not allowed. Make sure your domain is set in Supabase → Auth → URL Configuration.'
+      error.value = 'Redirect URL not allowed. Add your domain in Supabase → Auth → URL Configuration.'
     } else {
       error.value = msg
     }
