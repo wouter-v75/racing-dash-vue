@@ -61,7 +61,7 @@ const router = useRouter()
 
 const email = ref('')
 const password = ref('')
-const mode = ref('login') // 'login' | 'signup' | 'magic'
+const mode = ref('login')
 const loading = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -107,7 +107,6 @@ async function submit () {
       return
     }
 
-    // Password login
     const { error: e2 } = await supabase.auth.signInWithPassword({
       email: email.value,
       password: password.value
@@ -149,25 +148,26 @@ async function resendVerification () {
 
 <style scoped>
 .login-wrap {
-  min-height: calc(100vh - 120px);
+  min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 24px;
-  background:
-    radial-gradient(1200px 600px at 10% 10%, rgba(255,255,255,.08), transparent 60%),
-    radial-gradient(1000px 500px at 90% 90%, rgba(255,255,255,.06), transparent 60%);
+
+  /* NEW GREY BACKGROUND */
+  background: linear-gradient(145deg, #2c2c2c, #1c1c1c);
+  color: #fff;
 }
 
 .glass-card {
   width: 100%;
   max-width: 460px;
-  background: rgba(255,255,255,.12);
+  background: rgba(255,255,255,.1);
   border: 1px solid rgba(255,255,255,.25);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-radius: 18px;
   padding: 20px 20px 16px;
-  box-shadow: 0 18px 60px rgba(0,0,0,.18);
+  box-shadow: 0 18px 60px rgba(0,0,0,.4);
   color: #fff;
 }
 
