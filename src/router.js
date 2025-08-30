@@ -4,7 +4,7 @@ import Results from './views/Results.vue'
 import Live from './views/Live.vue'
 import Performance from './views/Performance.vue'
 import Login from './views/Login.vue'
-import { account } from './lib/appwrite'
+import { supabase } from './lib/supabase'
 
 const routes = [
   { path: '/', redirect: '/results' },
@@ -17,19 +17,10 @@ const routes = [
 const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach(async (to) => {
+  if (to.path === '/login') return true
   if (!to.meta.requiresAuth) return true
-
-  // DEBUG: log to confirm this runs
-  console.log('[guard] checking auth for', to.fullPath)
-
-  try {
-    const me = await account.get()
-    console.log('[guard] user session OK', me.$id)
-    return true
-  } catch (e) {
-    console.log('[guard] no session, redirecting to /login')
-    return '/login'
-  }
+  const { data } = await supabase.auth.getSession()
+  return data.session ? true : '/login'
 })
 
 export default router
