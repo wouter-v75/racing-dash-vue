@@ -1,18 +1,1 @@
-{
-"name": "sailing-dashboard-vue",
-"private": true,
-"version": "0.1.0",
-"type": "module",
-"scripts": {
-"dev": "vite",
-"build": "vite build",
-"preview": "vite preview"
-},
-"dependencies": {
-"vue": "^3.4.38"
-},
-"devDependencies": {
-"@vitejs/plugin-vue": "^5.1.2",
-"vite": "^5.4.2"
-}
-}
+{"name":"sailing-dashboard-vue","private":true,"version":"0.1.0","type":"module","scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},"devDependencies":{"@vitejs/plugin-vue":"^6.0.1","vite":"^7.1.3","vite-plugin-pwa":"^1.0.3","vue":"^3.5.20"},"dependencies":{"@supabase/supabase-js":"^2.56.1","appwrite":"^19.0.0","node-appwrite":"18.0.0","vue-router":"^4.5.1"}}
