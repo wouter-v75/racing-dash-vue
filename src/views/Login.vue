@@ -5,14 +5,15 @@
       <p class="muted">RacingDash — secure access for your sailing team</p>
 
       <form class="form" @submit.prevent="submit">
+        <template v-if="mode === 'signup'">
+          <label>First name</label>
+          <input v-model.trim="firstName" type="text" required placeholder="Jane" />
+          <label>Last name</label>
+          <input v-model.trim="lastName" type="text" required placeholder="Doe" />
+        </template>
+
         <label>Email</label>
-        <input
-          v-model.trim="email"
-          type="email"
-          autocomplete="username"
-          required
-          placeholder="you@example.com"
-        />
+        <input v-model.trim="email" type="email" autocomplete="username" required placeholder="you@example.com" />
 
         <label v-if="mode !== 'magic'">
           Password
@@ -61,26 +62,22 @@ const router = useRouter()
 
 const email = ref('')
 const password = ref('')
-const mode = ref('login')
+const firstName = ref('')
+const lastName = ref('')
+const mode = ref('login') // 'login' | 'signup' | 'magic'
 const loading = ref(false)
 const error = ref('')
 const notice = ref('')
-
 let unsub = null
 
 onMounted(async () => {
-  // 1) If a session already exists (e.g., returned from email link), go in.
   const { data } = await supabase.auth.getSession()
   if (data.session) {
     router.replace('/results')
     return
   }
-
-  // 2) Listen for auth changes (email verification or magic link redirect sets session here)
   unsub = supabase.auth.onAuthStateChange((_event, session) => {
-    if (session) {
-      router.replace('/results')
-    }
+    if (session) router.replace('/results')
   }).data?.subscription
 })
 
@@ -100,10 +97,20 @@ async function submit () {
   loading.value = true
   try {
     if (mode.value === 'signup') {
+      // Require names
+      if (!firstName.value || !lastName.value) {
+        throw new Error('Please provide first and last name.')
+      }
       const { error: e } = await supabase.auth.signUp({
         email: email.value,
         password: password.value,
-        options: { emailRedirectTo: window.location.origin }
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: {
+            first_name: firstName.value,
+            last_name: lastName.value
+          }
+        }
       })
       if (e) throw e
       notice.value = 'Check your inbox to confirm your email, then sign in.'
@@ -120,14 +127,12 @@ async function submit () {
       return
     }
 
-    // Password login → wait for session, then route
-    const { data, error: e2 } = await supabase.auth.signInWithPassword({
+    const { error: e2 } = await supabase.auth.signInWithPassword({
       email: email.value,
       password: password.value
     })
     if (e2) throw e2
 
-    // safety: confirm session before routing (avoids guard race)
     const { data: s } = await supabase.auth.getSession()
     if (s.session) router.replace('/results')
   } catch (e) {
@@ -169,12 +174,9 @@ async function resendVerification () {
   display: grid;
   place-items: center;
   padding: 24px;
-
-  /* NEW GREY BACKGROUND */
   background: linear-gradient(145deg, #2c2c2c, #1c1c1c);
   color: #fff;
 }
-
 .glass-card {
   width: 100%;
   max-width: 460px;
@@ -187,10 +189,8 @@ async function resendVerification () {
   box-shadow: 0 18px 60px rgba(0,0,0,.4);
   color: #fff;
 }
-
 .title { margin: 6px 0 4px; font-weight: 800; }
 .muted { opacity: .88; margin: 0 0 8px; }
-
 .form { margin-top: 12px; display: grid; gap: 8px; }
 label { font-size: .9rem; opacity: .9; }
 input {
@@ -203,7 +203,6 @@ input {
   outline: none;
 }
 input::placeholder { color: rgba(255,255,255,.65); }
-
 .btn {
   border: 0;
   border-radius: 12px;
@@ -218,34 +217,16 @@ input::placeholder { color: rgba(255,255,255,.65); }
   color: #0b2239;
   font-weight: 800;
 }
-.btn.link {
-  background: transparent;
-  text-decoration: underline;
-  padding: .25rem .4rem;
-  opacity: .95;
-}
+.btn.link { background: transparent; text-decoration: underline; padding: .25rem .4rem; opacity: .95; }
 .btn.link.active { text-decoration: none; font-weight: 700; }
-.btn.ghost {
-  background: rgba(255,255,255,.12);
-  border: 1px solid rgba(255,255,255,.25);
-}
-
+.btn.ghost { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); }
 .row { display: flex; gap: .5rem; justify-content: center; margin-top: .5rem; flex-wrap: wrap; }
-
 .notice {
-  margin-top: 8px;
-  color: #fff7d6;
-  background: rgba(255,198,0,.12);
-  border: 1px solid rgba(255,198,0,.25);
-  padding: .55rem .7rem;
-  border-radius: 10px;
+  margin-top: 8px; color: #fff7d6; background: rgba(255,198,0,.12);
+  border: 1px solid rgba(255,198,0,.25); padding: .55rem .7rem; border-radius: 10px;
 }
 .error {
-  margin-top: 8px;
-  color: #ffd4d4;
-  background: rgba(255,0,0,.12);
-  border: 1px solid rgba(255,0,0,.25);
-  padding: .55rem .7rem;
-  border-radius: 10px;
+  margin-top: 8px; color: #ffd4d4; background: rgba(255,0,0,.12);
+  border: 1px solid rgba(255,0,0,.25); padding: .55rem .7rem; border-radius: 10px;
 }
 </style>
