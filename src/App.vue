@@ -40,8 +40,8 @@ async function logout() {
       </nav>
 
       <div class="nav-right">
-        <span v-if="firstName" class="hello">Hi, {{ firstName }}</span>
-        <button class="logout-btn" @click="logout">Log out</button>
+         <router-link v-if="firstName" class="hello" to="/account">Hi, {{ firstName }}</router-link>
+         <button class="logout-btn" @click="logout">Log out</button>
       </div>
     </header>
 
@@ -68,4 +68,14 @@ async function logout() {
 }
 .logout-btn:hover { background:#d62828; }
 .content { flex:1; padding:1rem; overflow-y:auto; }
+
+.hello {
+  opacity: 0.9;
+  color: #fff;
+  text-decoration: none;
+  margin-right: 10px;
+}
+.hello.router-link-active {
+  text-decoration: underline;
+}
 </style>
