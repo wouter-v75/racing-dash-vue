@@ -2,9 +2,10 @@
   <div class="page">
     <div class="glass">
       <h2 class="title">Account</h2>
-      <p class="muted">Manage your profile and team membership.</p>
+      <p class="muted">Manage your profile, team, and boat selection.</p>
 
       <form class="form" @submit.prevent="save">
+        <!-- Names -->
         <div class="grid">
           <div>
             <label>First name</label>
@@ -16,6 +17,7 @@
           </div>
         </div>
 
+        <!-- Team + Boat -->
         <div class="grid">
           <div>
             <label>Sailing team</label>
@@ -27,6 +29,18 @@
           </div>
 
           <div>
+            <label>Boat</label>
+            <select v-model="boatId" :disabled="!teamId || loadingBoats">
+              <option value="">— Select boat —</option>
+              <option v-for="b in boats" :key="b.id" :value="b.id">{{ b.name }}</option>
+            </select>
+            <small class="muted" v-if="loadingBoats">Loading boats…</small>
+          </div>
+        </div>
+
+        <!-- Role -->
+        <div class="grid">
+          <div>
             <label>User type</label>
             <select v-model="role">
               <option value="guest">Guest</option>
@@ -36,7 +50,14 @@
               <option value="admin">Admin</option>
             </select>
             <small class="muted">
-              Non-admins asking for higher access will be set to <b>guest</b> until approved.
+              Non-admins requesting a higher role will be saved as <b>guest</b> until an admin approves.
+            </small>
+          </div>
+          <div class="readonly">
+            <label>Current access</label>
+            <div class="pill" :data-role="currentRole || 'guest'">{{ currentRole || 'guest' }}</div>
+            <small v-if="requestedRole" class="muted">
+              Requested: <b>{{ requestedRole }}</b> (pending admin approval)
             </small>
           </div>
         </div>
@@ -57,38 +78,53 @@
 import { ref, onMounted, watch } from 'vue'
 import { supabase } from '../lib/supabase'
 
-// form state
+/**
+ * Assumptions (DB):
+ * - tables: teams(id,name), boats(id,name,team_id), team_members(team_id,user_id,role,requested_role)
+ * - RLS policies let a signed-in user read teams/boats for their team and upsert their own team_members row.
+ */
+
 const firstName = ref('')
 const lastName  = ref('')
-const teamId    = ref('')
-const role      = ref('guest')
 
 const teams  = ref([])
+const teamId = ref('')
+
 const boats  = ref([])
-const boatId = ref('')       // selected boat id
-const saving = ref(false)
+const boatId = ref('')
+
+const role           = ref('guest')     // chosen in UI
+const currentRole    = ref('guest')     // from membership row
+const requestedRole  = ref(null)
+
 const loadingTeams = ref(false)
 const loadingBoats = ref(false)
+const saving = ref(false)
 const notice = ref('')
 const error  = ref('')
 
-const currentUser = ref(null)
+const user = ref(null)
 const isAdmin = ref(false)
 
+// Load auth user & metadata
 async function loadUser() {
   const { data, error: e } = await supabase.auth.getUser()
   if (e) throw e
-  currentUser.value = data.user
+  user.value = data.user
   const meta = data.user?.user_metadata || {}
   firstName.value = meta.first_name || ''
   lastName.value  = meta.last_name  || ''
-  boatId.value    = meta.boat_id    || ''
+  // Prefer team/boat from membership; metadata for boat is saved on save()
 }
 
+// Load teams
 async function loadTeams() {
   loadingTeams.value = true
   try {
-    const { data, error: e } = await supabase.from('teams').select('id,name').order('name')
+    const { data, error: e } = await supabase
+      .from('teams')
+      .select('id,name')
+      .order('name')
     if (e) throw e
     teams.value = data || []
   } finally {
@@ -96,29 +132,35 @@ async function loadTeams() {
   }
 }
 
+// Load membership (prefill team + role)
 async function loadMembership() {
-  if (!currentUser.value) return
+  if (!user.value) return
   const { data, error: e } = await supabase
     .from('team_members')
-    .select('team_id, role')
-    .eq('user_id', currentUser.value.id)
+    .select('team_id, role, requested_role')
+    .eq('user_id', user.value.id)
     .limit(1)
     .maybeSingle()
-  if (e && e.code !== 'PGRST116') throw e
+  if (e && e.code !== 'PGRST116') throw e // ignore "no rows"
   if (data) {
-    teamId.value = data.team_id || ''
-    role.value   = data.role || 'guest'
+    teamId.value      = data.team_id || ''
+    currentRole.value = data.role || 'guest'
+    requestedRole.value = data.requested_role || null
+    role.value = currentRole.value
     isAdmin.value = data.role === 'admin'
   } else {
     teamId.value = ''
-    role.value   = 'guest'
+    currentRole.value = 'guest'
+    requestedRole.value = null
+    role.value = 'guest'
     isAdmin.value = false
   }
 }
 
+// Load boats for selected team
 async function loadBoatsForTeam() {
   boats.value = []
-  boatId.value = boatId.value // keep prior if still valid
+  boatId.value = boatId.value // keep if valid
   if (!teamId.value) return
   loadingBoats.value = true
   try {
@@ -129,7 +171,7 @@ async function loadBoatsForTeam() {
       .order('name')
     if (e) throw e
     boats.value = data || []
-    // If previous selection not in list, clear it
+    // If currently selected boat not in list, clear it
     if (boatId.value && !boats.value.some(b => b.id === boatId.value)) {
       boatId.value = ''
     }
@@ -138,45 +180,55 @@ async function loadBoatsForTeam() {
   }
 }
 
-watch(teamId, () => {
-  loadBoatsForTeam()
-})
+watch(teamId, () => loadBoatsForTeam())
 
+// Save profile + membership
 async function save() {
   error.value = ''; notice.value = ''; saving.value = true
   try {
-    // 1) Update auth metadata (names + boat)
-    // find boat name from list if id set
-    const selectedBoat = boats.value.find(b => b.id === boatId.value)
+    // Validate
+    if (!firstName.value || !lastName.value) {
+      throw new Error('Please provide first and last name.')
+    }
+
+    // 1) Update auth metadata (names + selected boat)
+    let selectedBoat = boats.value.find(b => b.id === boatId.value)
     const metaUpdate = {
       first_name: firstName.value,
       last_name : lastName.value,
       boat_id   : boatId.value || null,
-      boat_name : selectedBoat?.name || null,
+      boat_name : selectedBoat?.name || null
     }
     const { error: e1 } = await supabase.auth.updateUser({ data: metaUpdate })
     if (e1) throw e1
 
-    // 2) Upsert membership (same logic as before: non-admin stays guest; requested_role recorded)
+    // 2) Upsert membership (non-admins cannot escalate role themselves)
     if (teamId.value) {
       let finalRole = role.value
-      let requestedRole = null
+      let reqRole   = null
       if (!isAdmin.value && role.value !== 'guest') {
-        requestedRole = role.value
+        reqRole   = role.value
         finalRole = 'guest'
       }
+
       const { error: e2 } = await supabase
         .from('team_members')
-        .upsert({
-          team_id: teamId.value,
-          user_id: currentUser.value.id,
-          role: finalRole,
-          requested_role: requestedRole
-        }, { onConflict: 'team_id,user_id' })
+        .upsert(
+          {
+            team_id: teamId.value,
+            user_id: user.value.id,
+            role: finalRole,
+            requested_role: reqRole
+          },
+          { onConflict: 'team_id,user_id' }
+        )
       if (e2) throw e2
 
-      notice.value = requestedRole
-        ? `Request for "${requestedRole}" sent. You remain "guest" until an admin approves.`
+      currentRole.value   = finalRole
+      requestedRole.value = reqRole
+
+      notice.value = reqRole
+        ? `Request for "${reqRole}" sent. You remain "guest" until an admin approves.`
         : 'Profile updated.'
     } else {
       notice.value = 'Profile updated (no team selected).'
@@ -196,17 +248,18 @@ onMounted(async () => {
 })
 </script>
 
-
 <style scoped>
 .page { padding: 1rem; color:#fff; }
 .glass {
   background: rgba(255,255,255,.12);
   border: 1px solid rgba(255,255,255,.25);
   backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 8px 30px rgba(0,0,0,.18);
 }
+
 .title { margin:0 0 .3rem 0; }
 .muted { opacity:.85; margin-bottom:.8rem; }
 
@@ -216,12 +269,23 @@ onMounted(async () => {
 
 label { display:block; font-size:.9rem; opacity:.92; margin-bottom:.25rem; }
 input, select {
-  width:100%; padding:.65rem .8rem; border-radius:10px; border:1px solid rgba(255,255,255,.35);
-  background: rgba(255,255,255,.08); color:#fff; outline:none;
+  width:100%; padding:.65rem .8rem; border-radius:10px;
+  border:1px solid rgba(255,255,255,.35);
+  background: rgba(255,255,255,.08);
+  color:#fff; outline:none;
 }
+select:disabled, input:disabled { opacity:.7; cursor:not-allowed; }
+
 .row { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
 .btn { border:0; border-radius:12px; padding:.7rem 1rem; cursor:pointer; color:#0b2239; }
 .btn.primary { background:linear-gradient(135deg,#4facfe,#00f2fe); font-weight:800; }
+
 .notice { color:#fff7d6; background:rgba(255,198,0,.12); border:1px solid rgba(255,198,0,.25); padding:.5rem .6rem; border-radius:10px; }
-.error { color:#ffd4d4; background:rgba(255,0,0,.12); border:1px solid rgba(255,0,0,.25); padding:.5rem .6rem; border-radius:10px; }
+.error  { color:#ffd4d4; background:rgba(255,0,0,.12);   border:1px solid rgba(255,0,0,.25);   padding:.5rem .6rem; border-radius:10px; }
+
+.readonly .pill {
+  display:inline-block; padding:.4rem .6rem; border-radius:999px;
+  background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.25);
+  text-transform:capitalize; font-weight:700; color:#fff;
+}
 </style>
