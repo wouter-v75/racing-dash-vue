@@ -5,6 +5,7 @@ import Performance from './views/Performance.vue'
 import Login from './views/Login.vue'
 import Account from './views/Account.vue'
 import { supabase } from './lib/supabase'
+import AdminApprovals from './views/AdminApprovals.vue'
 
 const routes = [
   { path: '/', redirect: '/results' },
@@ -13,6 +14,7 @@ const routes = [
   { path: '/live', component: Live, meta: { requiresAuth: true } },
   { path: '/performance', component: Performance, meta: { requiresAuth: true } },
   { path: '/account', component: Account, meta: { requiresAuth: true } },
+  { path: '/admin/approvals', component: AdminApprovals, meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })
