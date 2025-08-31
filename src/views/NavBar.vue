@@ -1,9 +1,11 @@
 <template>
-  <nav class="navbar">
-    <router-link to="/results">Results</router-link>
-    <router-link to="/live">Live</router-link>
-    <router-link to="/performance">Performance</router-link>
-  </nav>
+ <nav>
+  <router-link to="/results">Results</router-link>
+  <router-link to="/live">Live</router-link>
+  <router-link to="/performance">Performance</router-link>
+  <router-link v-if="isAdmin" to="/admin/approvals">Admin</router-link>
+</nav>
+
 </template>
 
 <script setup>
