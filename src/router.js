@@ -1,9 +1,9 @@
-// src/router.js
 import { createRouter, createWebHistory } from 'vue-router'
 import Results from './views/Results.vue'
 import Live from './views/Live.vue'
 import Performance from './views/Performance.vue'
 import Login from './views/Login.vue'
+import Account from './views/Account.vue'
 import { supabase } from './lib/supabase'
 
 const routes = [
@@ -12,6 +12,7 @@ const routes = [
   { path: '/results', component: Results, meta: { requiresAuth: true } },
   { path: '/live', component: Live, meta: { requiresAuth: true } },
   { path: '/performance', component: Performance, meta: { requiresAuth: true } },
+  { path: '/account', component: Account, meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })
