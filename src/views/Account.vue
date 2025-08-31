@@ -54,7 +54,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { supabase } from '../lib/supabase'
 
 // form state
@@ -63,17 +63,18 @@ const lastName  = ref('')
 const teamId    = ref('')
 const role      = ref('guest')
 
-// lists & flags
-const teams = ref([])
-const loadingTeams = ref(false)
+const teams  = ref([])
+const boats  = ref([])
+const boatId = ref('')       // selected boat id
 const saving = ref(false)
+const loadingTeams = ref(false)
+const loadingBoats = ref(false)
 const notice = ref('')
 const error  = ref('')
 
 const currentUser = ref(null)
-const isAdmin = ref(false) // computed from current membership role === 'admin'
+const isAdmin = ref(false)
 
-// Load current user + metadata
 async function loadUser() {
   const { data, error: e } = await supabase.auth.getUser()
   if (e) throw e
@@ -81,9 +82,9 @@ async function loadUser() {
   const meta = data.user?.user_metadata || {}
   firstName.value = meta.first_name || ''
   lastName.value  = meta.last_name  || ''
+  boatId.value    = meta.boat_id    || ''
 }
 
-// Load teams for dropdown
 async function loadTeams() {
   loadingTeams.value = true
   try {
@@ -95,7 +96,6 @@ async function loadTeams() {
   }
 }
 
-// Load current membership (prefill team + role)
 async function loadMembership() {
   if (!currentUser.value) return
   const { data, error: e } = await supabase
@@ -104,55 +104,80 @@ async function loadMembership() {
     .eq('user_id', currentUser.value.id)
     .limit(1)
     .maybeSingle()
-  if (e && e.code !== 'PGRST116') throw e // ignore no-rows
+  if (e && e.code !== 'PGRST116') throw e
   if (data) {
     teamId.value = data.team_id || ''
     role.value   = data.role || 'guest'
     isAdmin.value = data.role === 'admin'
   } else {
-    // no membership yet
     teamId.value = ''
     role.value   = 'guest'
     isAdmin.value = false
   }
 }
 
-// Save both auth metadata and membership
+async function loadBoatsForTeam() {
+  boats.value = []
+  boatId.value = boatId.value // keep prior if still valid
+  if (!teamId.value) return
+  loadingBoats.value = true
+  try {
+    const { data, error: e } = await supabase
+      .from('boats')
+      .select('id,name')
+      .eq('team_id', teamId.value)
+      .order('name')
+    if (e) throw e
+    boats.value = data || []
+    // If previous selection not in list, clear it
+    if (boatId.value && !boats.value.some(b => b.id === boatId.value)) {
+      boatId.value = ''
+    }
+  } finally {
+    loadingBoats.value = false
+  }
+}
+
+watch(teamId, () => {
+  loadBoatsForTeam()
+})
+
 async function save() {
   error.value = ''; notice.value = ''; saving.value = true
   try {
-    // 1) Update user metadata (first/last name)
-    const { error: e1 } = await supabase.auth.updateUser({
-      data: { first_name: firstName.value, last_name: lastName.value }
-    })
+    // 1) Update auth metadata (names + boat)
+    // find boat name from list if id set
+    const selectedBoat = boats.value.find(b => b.id === boatId.value)
+    const metaUpdate = {
+      first_name: firstName.value,
+      last_name : lastName.value,
+      boat_id   : boatId.value || null,
+      boat_name : selectedBoat?.name || null,
+    }
+    const { error: e1 } = await supabase.auth.updateUser({ data: metaUpdate })
     if (e1) throw e1
 
-    // 2) Upsert membership in team_members
+    // 2) Upsert membership (same logic as before: non-admin stays guest; requested_role recorded)
     if (teamId.value) {
-      // If user is not admin but selected a higher role, store request and set role to guest
       let finalRole = role.value
       let requestedRole = null
       if (!isAdmin.value && role.value !== 'guest') {
         requestedRole = role.value
         finalRole = 'guest'
       }
-
-      // upsert (by user_id + team_id) — create a deterministic key
       const { error: e2 } = await supabase
         .from('team_members')
         .upsert({
           team_id: teamId.value,
           user_id: currentUser.value.id,
           role: finalRole,
-          requested_role: requestedRole // make sure column exists, see note below
+          requested_role: requestedRole
         }, { onConflict: 'team_id,user_id' })
       if (e2) throw e2
 
-      if (requestedRole) {
-        notice.value = `Request for "${requestedRole}" sent. You remain "guest" until an admin approves.`
-      } else {
-        notice.value = 'Profile updated.'
-      }
+      notice.value = requestedRole
+        ? `Request for "${requestedRole}" sent. You remain "guest" until an admin approves.`
+        : 'Profile updated.'
     } else {
       notice.value = 'Profile updated (no team selected).'
     }
@@ -167,8 +192,10 @@ onMounted(async () => {
   await loadUser()
   await loadTeams()
   await loadMembership()
+  await loadBoatsForTeam()
 })
 </script>
+
 
 <style scoped>
 .page { padding: 1rem; color:#fff; }
