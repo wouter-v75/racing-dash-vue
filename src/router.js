@@ -1,27 +1,26 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
+import { supabase } from './lib/supabase'
+
 import Results from './views/Results.vue'
-import Live from './views/Live.vue'
-import Performance from './views/Performance.vue'
 import Login from './views/Login.vue'
 import Account from './views/Account.vue'
-import { supabase } from './lib/supabase'
-import AdminApprovals from './views/AdminApprovals.vue'
 
 const routes = [
   { path: '/', redirect: '/results' },
-  { path: '/login', component: Login },
   { path: '/results', component: Results, meta: { requiresAuth: true } },
-  { path: '/live', component: Live, meta: { requiresAuth: true } },
-  { path: '/performance', component: Performance, meta: { requiresAuth: true } },
   { path: '/account', component: Account, meta: { requiresAuth: true } },
-  { path: '/admin/approvals', component: AdminApprovals, meta: { requiresAuth: true } },
+  { path: '/login', component: Login },
 ]
 
-const router = createRouter({ history: createWebHistory(), routes })
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes,
+})
 
 router.beforeEach(async (to) => {
   if (to.path === '/login') return true
   if (!to.meta.requiresAuth) return true
+
   const { data } = await supabase.auth.getSession()
   return data.session ? true : '/login'
 })
