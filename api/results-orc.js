@@ -1,7 +1,7 @@
+
 // api/results-orc.js
-// Ensure Serverless Node runtime on Vercel (not Edge)
-export const config = { runtime: 'nodejs18.x' }
-// (Newer Vercel runtimes also accept: export const runtime = 'nodejs')
+// Ensure Vercel uses Node runtime (not Edge)
+export const runtime = 'nodejs'
 
 export default async function handler(req, res) {
   // CORS
