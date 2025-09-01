@@ -1,54 +1,55 @@
 <template>
   <div class="results-page">
-    <h1>Regatta Results</h1>
+    <div class="toolbar">
+      <div class="left">
+        <label>Event</label>
+        <select v-model="selectedRegattaId" @change="reloadAll" :disabled="regattas.length===0">
+          <option disabled value="">— select event —</option>
+          <option v-for="r in regattas" :key="r.id" :value="r.id">
+            {{ r.name }} <span v-if="r.location">• {{ r.location }}</span>
+          </option>
+        </select>
+      </div>
+      <div class="right">
+        <a v-if="currentEvent?.event_url" :href="currentEvent.event_url" target="_blank" rel="noopener" class="btn link">
+          Open event site
+        </a>
+        <span class="pill" v-if="boatName">Boat: {{ boatName }}</span>
+        <button class="btn ghost" @click="reloadAll" :disabled="loading.any">Refresh</button>
+      </div>
+    </div>
 
-    <!-- Regatta dropdown -->
-    <select v-model="selectedRegattaId" @change="reloadAll">
-      <option disabled value="">Select regatta…</option>
-      <option v-for="r in regattas" :key="r.id" :value="r.id">
-        {{ r.name }}
-      </option>
-    </select>
+    <p v-if="!selectedRegattaId" class="empty big">Choose an event to load results.</p>
+    <p v-if="err" class="error">{{ err }}</p>
 
-    <!-- Overall standings -->
-    <div class="card overall-card" v-if="overallRows.length">
+    <!-- Overall -->
+    <div v-if="selectedRegattaId" class="card">
       <FlipCard>
         <template #front>
-          <h2 class="card-title">Overall Standings</h2>
-          <div v-if="!overallRows.length" class="empty">Loading…</div>
+          <h3 class="card-title">Overall Standings</h3>
+          <div v-if="!overallReady" class="empty">Loading…</div>
           <div v-else class="stats">
-            <div class="stat">
-              <div class="k">Position</div>
-              <div class="v">{{ myOverall?.position || '–' }}</div>
-            </div>
-            <div class="stat">
-              <div class="k">Points</div>
-              <div class="v">{{ myOverall?.points || '–' }}</div>
-            </div>
-            <div class="stat">
-              <div class="k">Total</div>
-              <div class="v">{{ myOverall?.total || '–' }}</div>
-            </div>
+            <div class="stat"><div class="k">Position</div><div class="v">{{ myOverall?.position || '–' }}</div></div>
+            <div class="stat"><div class="k">Total</div><div class="v">{{ myOverall?.total || myOverall?.points || '–' }}</div></div>
+            <div class="stat"><div class="k">Net</div><div class="v">{{ myOverall?.points || '–' }}</div></div>
           </div>
           <p class="hint">Click card to flip</p>
         </template>
         <template #back>
-          <h2 class="card-title">Overall Standings (Full Table)</h2>
+          <h3 class="card-title">Overall — full table</h3>
           <div class="table-wrap">
             <table>
               <thead>
-                <tr>
-                  <th>#</th><th>Boat</th><th>Sail No</th><th>Club</th><th>Skipper</th><th>Points</th>
-                </tr>
+                <tr><th>#</th><th>Boat</th><th>Sail #</th><th>Skipper</th><th>Pts</th><th>Total</th></tr>
               </thead>
               <tbody>
                 <tr v-for="row in overallRows" :key="row._key" :class="{ me: isMe(row.name) }">
                   <td>{{ row.position }}</td>
                   <td>{{ row.name }}</td>
                   <td>{{ row.sailNo }}</td>
-                  <td>{{ row.club }}</td>
                   <td>{{ row.skipper }}</td>
                   <td>{{ row.points }}</td>
+                  <td>{{ row.total }}</td>
                 </tr>
               </tbody>
             </table>
@@ -57,174 +58,234 @@
       </FlipCard>
     </div>
 
-    <!-- Race details cards -->
-    <div class="card" v-for="r in races" :key="r.id">
-      <FlipCard>
-        <template #front>
-          <h3 class="card-title">{{ r.label }}</h3>
-          <div v-if="!raceTables[r.id]" class="empty">Loading…</div>
-          <div v-else class="stats">
-            <div class="stat"><div class="k">Position</div><div class="v">{{ raceSummaries[r.id]?.position || '–' }}</div></div>
-            <div class="stat"><div class="k">Finish</div><div class="v">{{ raceSummaries[r.id]?.finishTime || '–' }}</div></div>
-            <div class="stat"><div class="k">Δ to 1st</div><div class="v">{{ raceSummaries[r.id]?.deltaToFirst || '–' }}</div></div>
-            <div class="stat"><div class="k">Δ in front</div><div class="v">{{ raceSummaries[r.id]?.deltaAhead || '–' }}</div></div>
-            <div class="stat"><div class="k">Δ behind</div><div class="v">{{ raceSummaries[r.id]?.deltaBehind || '–' }}</div></div>
-          </div>
-          <p class="hint">Click card to flip</p>
-        </template>
-        <template #back>
-          <h3 class="card-title">{{ r.label }} — Full Table</h3>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th><th>Δ to 1st</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in raceTables[r.id]" :key="row._key" :class="{ me: isMe(row.name) }">
-                  <td>{{ row.position }}</td>
-                  <td>{{ row.name }}</td>
-                  <td>{{ row.finishTime }}</td>
-                  <td>{{ row.correctedTime }}</td>
-                  <td>{{ row.deltaToFirst }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </template>
-      </FlipCard>
+    <!-- Race cards: one per race -->
+    <div class="grid">
+      <div class="card" v-for="r in races" :key="r.id">
+        <FlipCard>
+          <template #front>
+            <h3 class="card-title">{{ r.label }}</h3>
+            <div v-if="!raceTables[r.id]" class="empty">Loading…</div>
+            <div v-else class="stats">
+              <div class="stat"><div class="k">Position</div><div class="v">{{ raceSummaries[r.id]?.position || '–' }}</div></div>
+              <div class="stat"><div class="k">Finish</div><div class="v">{{ raceSummaries[r.id]?.finishTime || '–' }}</div></div>
+              <div class="stat"><div class="k">Δ to 1st</div><div class="v">{{ raceSummaries[r.id]?.deltaToFirst || '–' }}</div></div>
+              <div class="stat"><div class="k">Δ in front</div><div class="v">{{ raceSummaries[r.id]?.deltaAhead || '–' }}</div></div>
+              <div class="stat"><div class="k">Δ behind</div><div class="v">{{ raceSummaries[r.id]?.deltaBehind || '–' }}</div></div>
+            </div>
+            <p class="hint">Click card to flip</p>
+          </template>
+          <template #back>
+            <h3 class="card-title">{{ r.label }} — full table</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th><th>Δ to 1st</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in raceTables[r.id]" :key="row._key" :class="{ me: isMe(row.name) }">
+                    <td>{{ row.position }}</td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.finishTime }}</td>
+                    <td>{{ row.correctedTime }}</td>
+                    <td>{{ row.deltaToFirst }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </FlipCard>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import FlipCard from '@/components/FlipCard.vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { supabase } from '../lib/supabase'
+import FlipCard from '../components/FlipCard.vue'
 
-// API base — blank = same domain (Vercel), or set VITE_API_BASE in .env
-const API_BASE = import.meta.env.VITE_API_BASE || ''
+const API_BASE = import.meta.env.VITE_API_BASE || '' // leave blank on Vercel
 
-// state
+/* user boat name for highlighting (pull from auth metadata if available) */
+const boatName = ref('')
+async function loadBoatFromUser(){
+  const { data } = await supabase.auth.getUser()
+  boatName.value = data?.user?.user_metadata?.boat_name || ''
+}
+function isMe(name=''){ return boatName.value && name?.toUpperCase() === boatName.value.toUpperCase() }
+
+/* data from Supabase: regattas list */
 const regattas = ref([])
 const selectedRegattaId = ref('')
-const classes = ref([])
-const races = ref([])
-const overallRows = ref([])
-const raceTables = ref({})
-const raceSummaries = ref({})
+const currentEvent = computed(() => regattas.value.find(r => r.id === selectedRegattaId.value) || null)
 
-// helpers
-async function api(path) {
+async function loadRegattas() {
+  const { data, error } = await supabase
+    .from('regattas')
+    .select('id,name,event_id,class_id,location,event_url,starts_on,ends_on')
+    .not('event_id','is', null)
+    .order('starts_on', { ascending: false })
+  if (!error) {
+    regattas.value = data || []
+    // Prefer Maxi Worlds 2024 if present
+    const maxi = regattas.value.find(r => (r.event_id || '').toLowerCase() === 'xolfq')
+    selectedRegattaId.value = maxi?.id || regattas.value[0]?.id || ''
+  }
+}
+const evId  = () => currentEvent.value?.event_id || ''
+const clsDb = () => currentEvent.value?.class_id || ''
+
+/* UI state */
+const classes = ref([])   // [{id,label}]
+const races = ref([])     // [{id,label}]
+const overallRows = ref([])  // table
+const overallReady = ref(false)
+const raceTables = ref({})      // {raceId: []}
+const raceSummaries = ref({})   // {raceId: {...}}
+
+const err = ref('')
+const loading = ref({
+  classes:false, races:false, overall:false, racesets:false,
+  get any(){ return this.classes||this.races||this.overall||this.racesets }
+})
+
+/* helpers */
+async function api(path){
   const r = await fetch(`${API_BASE}${path}`)
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.json()
 }
-
-const myBoatName = 'Northstar' // TODO: derive from logged-in user profile
-function isMe(name) {
-  return name && name.toLowerCase().includes(myBoatName.toLowerCase())
+function toSec(str){
+  if (!str) return null
+  if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(str)) return null
+  const p = str.split(':').map(Number)
+  return p.length === 3 ? p[0]*3600 + p[1]*60 + p[2] : p[0]*60 + p[1]
 }
-const myOverall = computed(() => overallRows.value.find(r => isMe(r.name)))
-
-// loaders
-async function loadRegattas() {
-  const { createClient } = await import('@supabase/supabase-js')
-  const supabase = createClient(
-    import.meta.env.VITE_SUPABASE_URL,
-    import.meta.env.VITE_SUPABASE_ANON_KEY
-  )
-  const { data } = await supabase.from('regattas').select('*').order('starts_on', { ascending: false })
-  regattas.value = data || []
-}
-
-function evId() {
-  const r = regattas.value.find(r => r.id === selectedRegattaId.value)
-  return r?.event_id || null
-}
-
-async function loadClasses() {
-  if (!evId()) return
-  const json = await api(`/api/results-orc?type=classes&eventId=${evId()}`)
-  classes.value = json.results || []
-}
-
-async function loadRaces() {
-  if (!evId()) return
-  const json = await api(`/api/results-orc?type=races&eventId=${evId()}`)
-  races.value = json.results || []
-}
-
-async function reloadOverall() {
-  if (!evId() || !classes.value.length) return
-  const classId = classes.value[0].id
-  const json = await api(`/api/results-orc?type=overall&eventId=${evId()}&classId=${classId}`)
-  overallRows.value = (json.results || []).map((row, i) => ({ ...row, _key: `ov-${i}` }))
-}
-
-async function loadAllRaceTables() {
-  if (!evId() || races.value.length === 0) return
-  for (const r of races.value) {
-    const json = await api(`/api/results-orc?type=race&eventId=${evId()}&raceId=${r.id}`)
-    const rows = (json.results || []).map((row, i) => ({ ...row, _key: `${r.id}-${i}` }))
-    raceTables.value[r.id] = rows
-
-    const idx = rows.findIndex(x => isMe(x.name))
-    const me = rows[idx]
-    const ahead = idx > 0 ? rows[idx - 1] : null
-    const behind = idx >= 0 && idx < rows.length - 1 ? rows[idx + 1] : null
-
-    raceSummaries.value[r.id] = {
-      position: me?.position || '–',
-      finishTime: me?.finishTime || '–',
-      deltaToFirst: me?.deltaToFirst || '–',
-      deltaAhead: ahead?.correctedTime && me?.correctedTime ? mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
-      deltaBehind: behind?.correctedTime && me?.correctedTime ? mmssDelta(me.correctedTime, behind.correctedTime) : '–'
-    }
-  }
-}
-
-function mmssDelta(a, b) {
-  function toSec(str) {
-    if (!str) return null
-    if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(str)) return null
-    const p = str.split(':').map(Number)
-    return p.length === 3 ? p[0]*3600 + p[1]*60 + p[2] : p[0]*60 + p[1]
-  }
+function mmssDelta(a,b){
   const s1 = toSec(a), s2 = toSec(b)
   if (s1 == null || s2 == null) return '–'
   const d = Math.max(0, s2 - s1)
   const mm = String(Math.floor(d/60)).padStart(2,'0')
-  const ss = String(d % 60).padStart(2,'0')
+  const ss = String(d%60).padStart(2,'0')
   return `${mm}:${ss}`
 }
 
-async function reloadAll() {
+/* loaders */
+async function loadClasses(){
+  classes.value = []; loading.value.classes = true; err.value=''
+  try {
+    const json = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
+    classes.value = json.results || []
+  } catch(e){ err.value = `Classes: ${e.message}` }
+  finally { loading.value.classes = false }
+}
+
+async function loadRaces(){
+  races.value = []; loading.value.races = true
+  try {
+    const json = await api(`/api/results-orc?type=races&eventId=${encodeURIComponent(evId())}`)
+    races.value = json.results || []
+  } catch(e){ err.value = `Races: ${e.message}` }
+  finally { loading.value.races = false }
+}
+
+async function reloadOverall(){
+  overallReady.value = false; loading.value.overall = true
+  try {
+    const classId = clsDb() || classes.value[0]?.id || ''
+    if (!classId) { overallRows.value = []; overallReady.value = true; return }
+    const json = await api(`/api/results-orc?type=overall&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(classId)}`)
+    overallRows.value = (json.results || []).map((r,i)=>({ ...r, _key:'ov'+i }))
+    overallReady.value = true
+  } catch(e){ err.value = `Overall: ${e.message}` }
+  finally { loading.value.overall = false }
+}
+
+async function loadAllRaceTables(){
+  raceTables.value = {}; raceSummaries.value = {}; loading.value.racesets = true
+  try {
+    for (const r of races.value) {
+      const json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(r.id)}`)
+      const rows = (json.results || []).map((row,i)=>({ ...row, _key:`${r.id}-${i}` }))
+      raceTables.value[r.id] = rows
+
+      const idx = rows.findIndex(x => isMe(x.name))
+      const me = rows[idx]
+      const ahead  = idx>0 ? rows[idx-1] : null
+      const behind = idx>=0 && idx<rows.length-1 ? rows[idx+1] : null
+
+      raceSummaries.value[r.id] = {
+        position:     me?.position || '–',
+        finishTime:   me?.finishTime || '–',
+        deltaToFirst: me?.deltaToFirst || '–',
+        deltaAhead:   (ahead && ahead.correctedTime && me?.correctedTime) ? mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
+        deltaBehind:  (behind && behind.correctedTime && me?.correctedTime) ? mmssDelta(me.correctedTime, behind.correctedTime) : '–'
+      }
+    }
+  } catch(e){ err.value = `Race tables: ${e.message}` }
+  finally { loading.value.racesets = false }
+}
+
+/* orchestrator */
+async function reloadAll(){
   if (!selectedRegattaId.value) return
-  await Promise.all([loadClasses(), loadRaces()])
+  await loadClasses()
+  await loadRaces()
   await reloadOverall()
   await loadAllRaceTables()
 }
 
-onMounted(loadRegattas)
+/* react to regatta change */
+watch(selectedRegattaId, reloadAll)
+
+onMounted(async () => {
+  await Promise.all([loadBoatFromUser(), loadRegattas()])
+  if (selectedRegattaId.value) await reloadAll()
+})
+
+const myOverall = computed(() => overallRows.value.find(r => isMe(r.name)))
 </script>
 
 <style scoped>
-.results-page { padding: 1rem; background: #eee; min-height: 100vh; }
-select { margin: 1rem 0; padding: .3rem; }
-.card { margin: 1rem 0; }
-.card-title { margin-bottom: .5rem; }
-.stats { display: flex; flex-wrap: wrap; gap: 1rem; }
-.stat { flex: 1 1 100px; background: #444; color: #fff; padding: .5rem; border-radius: .5rem; text-align: center; }
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th, td { border: 1px solid #ccc; padding: .3rem .5rem; text-align: center; }
-.me { background: #ffd; font-weight: bold; }
-.hint { font-size: .8rem; opacity: .7; margin-top: .5rem; }
+.results-page { color:#fff; padding: 12px; }
 
-/* FlipCard fix */
-.flip-card { perspective: 1000px; }
-.flip-inner { position: relative; transform-style: preserve-3d; transition: transform .6s; }
-.flip-card.is-flipped .flip-inner { transform: rotateY(180deg); }
-.flip-face { position: absolute; inset: 0; backface-visibility: hidden; }
-.flip-card-front { z-index: 2; }
-.flip-card-back { transform: rotateY(180deg); }
+/* toolbar */
+.toolbar { display:flex; justify-content:space-between; align-items:center; gap:.8rem; margin-bottom:.9rem; }
+.toolbar .left { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.toolbar .right { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+label { font-size:.9rem; opacity:.9; }
+select {
+  background: rgba(255,255,255,.08); color:#fff;
+  border:1px solid rgba(255,255,255,.3); border-radius:10px; padding:.5rem .7rem;
+}
+.pill { background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:.35rem .6rem; }
+.btn.ghost, .btn.link {
+  background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25);
+  border-radius:10px; padding:.5rem .8rem; color:#fff; text-decoration:none; cursor:pointer;
+}
+
+/* layout */
+.grid { display:grid; gap:16px; grid-template-columns: repeat(3, minmax(0,1fr)); }
+@media (max-width:1100px){ .grid { grid-template-columns: 1fr; } }
+
+.card { min-height:220px; }
+
+/* glass face lives inside FlipCard; we still style contents */
+.card-title { margin:0 0 .6rem 0; }
+
+/* stats blocks */
+.stats { display:grid; gap:10px; grid-template-columns: repeat(3, minmax(0,1fr)); }
+.stat { background: rgba(255,255,255,.06); padding:.7rem .8rem; border-radius:10px; }
+.k { font-size:.8rem; opacity:.9; }
+.v { font-weight:800; font-size:1.15rem; }
+
+.table-wrap { overflow:auto; border-radius:12px; }
+table { width:100%; border-collapse: collapse; }
+th, td { text-align:left; padding:.5rem .6rem; border-bottom: 1px solid rgba(255,255,255,.12); }
+tbody tr.me { background: rgba(0,255,170,.12); }
+
+.empty { opacity:.85; }
+.empty.big { opacity:.9; padding:1rem; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.2); border-radius:12px; }
+.hint { margin-top:.6rem; opacity:.75; font-size:.85rem; }
+.error { margin:.6rem 0 0; color:#ffd4d4; background:rgba(255,0,0,.12); border:1px solid rgba(255,0,0,.25); padding:.6rem .7rem; border-radius:10px; }
 </style>
