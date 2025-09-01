@@ -1,7 +1,10 @@
 // api/results-orc.js
-export const runtime = 'nodejs' // <-- ensure Node runtime on Vercel
+// Ensure Serverless Node runtime on Vercel (not Edge)
+export const config = { runtime: 'nodejs18.x' }
+// (Newer Vercel runtimes also accept: export const runtime = 'nodejs')
 
 export default async function handler(req, res) {
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -9,10 +12,10 @@ export default async function handler(req, res) {
 
   try {
     const q = req.query || {}
-    const type    = (q.type || 'overall').toString()
-    const eventId = (q.eventId || '').toString()
-    const classId = (q.classId || '').toString()
-    const raceId  = (q.raceId || '').toString()
+    const type    = String(q.type || 'overall')
+    const eventId = String(q.eventId || '')
+    const classId = q.classId != null ? String(q.classId) : ''
+    const raceId  = q.raceId  != null ? String(q.raceId)  : ''
 
     if (!eventId) return res.status(400).json({ success:false, message:'Missing eventId' })
 
@@ -30,7 +33,7 @@ export default async function handler(req, res) {
 
     if (type === 'overall') {
       const cls = classId || (await autoFirstClass(eventId))
-      if (!cls) return ok(res, 'overall', [], { eventId, classId:null })
+      if (!cls) return ok(res, 'overall', [], { eventId, classId: null })
       const html = await fetchText(seriesUrl(eventId, cls))
       const results = safeParse(parseOverall, html)
       return ok(res, 'overall', results, { eventId, classId: cls })
@@ -40,10 +43,10 @@ export default async function handler(req, res) {
       const htmlIdx = await fetchText(indexUrl(eventId))
       const races = safeParse(parseRaces, htmlIdx)
       const last = races[races.length - 1]
-      if (!last) return ok(res, 'race', [], { eventId, raceId:null })
+      if (!last) return ok(res, 'race', [], { eventId, raceId: null })
       const htmlRace = await fetchText(raceUrl(eventId, last.id))
       const rows = safeParse(parseRace, htmlRace)
-      return ok(res, 'race', rows, { eventId, raceId:last.id, raceLabel:last.label })
+      return ok(res, 'race', rows, { eventId, raceId: last.id, raceLabel: last.label })
     }
 
     if (type === 'race') {
@@ -77,7 +80,7 @@ async function fetchText(url) {
   return r.text()
 }
 function ok(res, resultType, results, meta = {}) {
-  return res.status(200).json({ success:true, resultType, results, meta, lastUpdated:new Date().toISOString() })
+  return res.status(200).json({ success:true, resultType, results, meta, lastUpdated: new Date().toISOString() })
 }
 
 /* ---------- Safety wrapper ---------- */
@@ -91,9 +94,9 @@ function safeParse(fn, html) {
 /* ---------- Utils ---------- */
 function cleanup(s) {
   return String(s || '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\u00A0/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(new RegExp("<[^>]+>", "g"), " ")
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
 }
 function toSec(str) {
@@ -111,11 +114,13 @@ function mmssDelta(a, b) {
   return `${mm}:${ss}`
 }
 
-/* ---------- Table extraction (no dynamic flags) ---------- */
+/* ---------- Table extraction (regex via RegExp(), no inline flags) ---------- */
 function extractLargestTableRows(html) {
-  // find the largest table block
+  const tableRe = new RegExp("<table[\\s\\S]*?<\\/table>", "gi")
+  const trsRe   = new RegExp("<tr[\\s\\S]*?<\\/tr>", "gi")
+  const cellRe  = new RegExp("<t[dh][^>]*>([\\s\\S]*?)<\\/t[dh]>", "gi")
+
   const tables = []
-  const tableRe = /<table[\s\S]*?<\/table>/gi
   let m
   while ((m = tableRe.exec(html)) !== null) tables.push(m[0])
   if (!tables.length) return []
@@ -125,8 +130,6 @@ function extractLargestTableRows(html) {
     if ((t.match(/<tr/gi) || []).length > (best.match(/<tr/gi) || []).length) best = t
   }
 
-  const trsRe  = /<tr[\s\S]*?<\/tr>/gi
-  const cellRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi
   const rows = []
   let rm
   while ((rm = trsRe.exec(best)) !== null) {
@@ -139,11 +142,11 @@ function extractLargestTableRows(html) {
   return rows
 }
 
-/* ---------- Parsers ---------- */
+/* ---------- Parsers (regex via RegExp()) ---------- */
 function parseClasses(html) {
-  // links like: action=series&eventid=...&classid=SY
+  // anchors like: action=series&...&classid=SY
   const out = []
-  const re = /href="[^"]*action=series&eventid=[^"&]+&classid=([^"&]+)[^"]*">([\s\S]*?)<\/a>/gi
+  const re = new RegExp("href=\"[^\"]*action=series&eventid=[^\"&]+&classid=([^\"&]+)[^\"]*\">([\\s\\S]*?)<\\/a>", "gi")
   let m
   while ((m = re.exec(html)) !== null) {
     const id = decodeURIComponent(m[1]).trim()
@@ -154,9 +157,9 @@ function parseClasses(html) {
 }
 
 function parseRaces(html) {
-  // links like: action=race&eventid=...&raceid=7
+  // anchors like: action=race&...&raceid=7
   const out = []
-  const re = /href="[^"]*action=race&eventid=[^"&]+&raceid=([^"&]+)[^"]*">([\s\S]*?)<\/a>/gi
+  const re = new RegExp("href=\"[^\"]*action=race&eventid=[^\"&]+&raceid=([^\"&]+)[^\"]*\">([\\s\\S]*?)<\\/a>", "gi")
   let m
   while ((m = re.exec(html)) !== null) {
     const id = decodeURIComponent(m[1]).trim()
@@ -164,7 +167,7 @@ function parseRaces(html) {
     if (id && !out.some(x => x.id === id)) out.push({ id, label })
   }
   // numeric-ish sort
-  return out.sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true, sensitivity:'base' }))
+  return out.sort((a,b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true, sensitivity:'base' }))
 }
 
 function parseOverall(html) {
@@ -214,7 +217,7 @@ function normalizeTime(t) {
   const s = cleanup(t)
   if (!s) return ''
   if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(s)) return s.toUpperCase()
-  // Allow H:MM:SS or MM:SS; keep string as-is if it looks time-ish
+  // Allow H:MM:SS or MM:SS; keep as-is if it looks time-ish
   const m = s.match(/^(\d{1,2}:)?\d{1,2}:\d{2}$/)
   return m ? s : s
 }
