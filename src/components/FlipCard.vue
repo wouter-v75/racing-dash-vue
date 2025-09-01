@@ -22,6 +22,7 @@ const flipped = ref(false)
   height: 100%;
   min-height: 160px;
 }
+
 .face {
   position: absolute;
   inset: 0;
@@ -35,9 +36,28 @@ const flipped = ref(false)
   transition: transform .6s;
   padding: 14px;
   color: #fff;
+
+  /* 👇 Important fix */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
-.front { transform: rotateY(0deg); }
-.back  { transform: rotateY(180deg); overflow: auto; }
-.flip.flipped .front { transform: rotateY(-180deg); }
-.flip.flipped .back  { transform: rotateY(0deg); }
+
+.front {
+  transform: rotateY(0deg);
+  z-index: 2;
+}
+
+.back {
+  transform: rotateY(180deg);
+  overflow: auto;
+}
+
+.flip.flipped .front {
+  transform: rotateY(-180deg);
+}
+
+.flip.flipped .back {
+  transform: rotateY(0deg);
+  z-index: 2;
+}
 </style>
