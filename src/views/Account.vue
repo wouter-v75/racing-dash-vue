@@ -75,178 +75,148 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted } from 'vue'
 import { supabase } from '../lib/supabase'
-
-/**
- * Assumptions (DB):
- * - tables: teams(id,name), boats(id,name,team_id), team_members(team_id,user_id,role,requested_role)
- * - RLS policies let a signed-in user read teams/boats for their team and upsert their own team_members row.
- */
 
 const firstName = ref('')
 const lastName  = ref('')
+const teamId    = ref('')
+const boatName  = ref('')
+const roleWanted = ref('guest')   // selected in the dropdown (Admin / Sailing team / …)
 
 const teams  = ref([])
-const teamId = ref('')
-
 const boats  = ref([])
-const boatId = ref('')
-
-const role           = ref('guest')     // chosen in UI
-const currentRole    = ref('guest')     // from membership row
-const requestedRole  = ref(null)
-
-const loadingTeams = ref(false)
-const loadingBoats = ref(false)
 const saving = ref(false)
-const notice = ref('')
-const error  = ref('')
+const saveMsg = ref('')
+const saveErr = ref('')
 
-const user = ref(null)
-const isAdmin = ref(false)
+const isAdmin = ref(false)  // computed from membership
 
-// Load auth user & metadata
-async function loadUser() {
-  const { data, error: e } = await supabase.auth.getUser()
-  if (e) throw e
-  user.value = data.user
-  const meta = data.user?.user_metadata || {}
+async function loadInitial() {
+  saveErr.value = ''
+  // 1) auth user & metadata
+  const { data: udata, error: uerr } = await supabase.auth.getUser()
+  if (uerr) { saveErr.value = uerr.message; return }
+  const meta = udata?.user?.user_metadata || {}
   firstName.value = meta.first_name || ''
   lastName.value  = meta.last_name  || ''
-  // Prefer team/boat from membership; metadata for boat is saved on save()
-}
+  boatName.value  = meta.boat_name  || ''
+  teamId.value    = meta.team_id    || ''
 
-// Load teams
-async function loadTeams() {
-  loadingTeams.value = true
-  try {
-    const { data, error: e } = await supabase
-      .from('teams')
-      .select('id,name')
-      .order('name')
-    if (e) throw e
-    teams.value = data || []
-  } finally {
-    loadingTeams.value = false
+  // 2) detect admin (any team)
+  const uid = udata?.user?.id
+  if (uid) {
+    const { data: mem } = await supabase
+      .from('team_members')
+      .select('team_id, role')
+      .eq('user_id', uid)
+    isAdmin.value = Array.isArray(mem) && mem.some(r => r.role === 'admin')
+  }
+
+  // 3) load teams/boats lists (adjust to your schema/policies)
+  const { data: trows } = await supabase.from('teams').select('id,name').order('name')
+  teams.value = trows || []
+  if (teamId.value) {
+    const { data: brows } = await supabase.from('boats').select('id,name').eq('team_id', teamId.value).order('name')
+    boats.value = brows || []
   }
 }
 
-// Load membership (prefill team + role)
-async function loadMembership() {
-  if (!user.value) return
-  const { data, error: e } = await supabase
-    .from('team_members')
-    .select('team_id, role, requested_role')
-    .eq('user_id', user.value.id)
-    .limit(1)
-    .maybeSingle()
-  if (e && e.code !== 'PGRST116') throw e // ignore "no rows"
-  if (data) {
-    teamId.value      = data.team_id || ''
-    currentRole.value = data.role || 'guest'
-    requestedRole.value = data.requested_role || null
-    role.value = currentRole.value
-    isAdmin.value = data.role === 'admin'
-  } else {
-    teamId.value = ''
-    currentRole.value = 'guest'
-    requestedRole.value = null
-    role.value = 'guest'
-    isAdmin.value = false
-  }
-}
-
-// Load boats for selected team
-async function loadBoatsForTeam() {
-  boats.value = []
-  boatId.value = boatId.value // keep if valid
-  if (!teamId.value) return
-  loadingBoats.value = true
+async function saveAccount() {
+  saving.value = true
+  saveErr.value = ''
+  saveMsg.value = ''
   try {
-    const { data, error: e } = await supabase
-      .from('boats')
-      .select('id,name')
-      .eq('team_id', teamId.value)
-      .order('name')
-    if (e) throw e
-    boats.value = data || []
-    // If currently selected boat not in list, clear it
-    if (boatId.value && !boats.value.some(b => b.id === boatId.value)) {
-      boatId.value = ''
-    }
-  } finally {
-    loadingBoats.value = false
-  }
-}
+    const { data: udata, error: uerr } = await supabase.auth.getUser()
+    if (uerr) throw uerr
+    const uid = udata?.user?.id
+    if (!uid) throw new Error('Not authenticated')
 
-watch(teamId, () => loadBoatsForTeam())
-
-// Save profile + membership
-async function save() {
-  error.value = ''; notice.value = ''; saving.value = true
-  try {
-    // Validate
-    if (!firstName.value || !lastName.value) {
-      throw new Error('Please provide first and last name.')
-    }
-
-    // 1) Update auth metadata (names + selected boat)
-    let selectedBoat = boats.value.find(b => b.id === boatId.value)
-    const metaUpdate = {
-      first_name: firstName.value,
-      last_name : lastName.value,
-      boat_id   : boatId.value || null,
-      boat_name : selectedBoat?.name || null
-    }
-    const { error: e1 } = await supabase.auth.updateUser({ data: metaUpdate })
-    if (e1) throw e1
-
-    // 2) Upsert membership (non-admins cannot escalate role themselves)
-    if (teamId.value) {
-      let finalRole = role.value
-      let reqRole   = null
-      if (!isAdmin.value && role.value !== 'guest') {
-        reqRole   = role.value
-        finalRole = 'guest'
+    // 1) Update auth metadata (first/last/boat/team)
+    const { error: upMetaErr } = await supabase.auth.updateUser({
+      data: {
+        first_name: firstName.value?.trim(),
+        last_name : lastName.value?.trim(),
+        boat_name : boatName.value?.trim(),
+        team_id   : teamId.value || null
       }
+    })
+    if (upMetaErr) throw upMetaErr
 
-      const { error: e2 } = await supabase
+    // 2) Ensure membership row exists
+    let membershipId = null
+    let currentRole = 'guest'
+    if (teamId.value) {
+      const { data: mem, error: memErr } = await supabase
         .from('team_members')
-        .upsert(
-          {
-            team_id: teamId.value,
-            user_id: user.value.id,
-            role: finalRole,
-            requested_role: reqRole
-          },
-          { onConflict: 'team_id,user_id' }
-        )
-      if (e2) throw e2
+        .select('id, role')
+        .eq('team_id', teamId.value)
+        .eq('user_id', uid)
+        .maybeSingle()
+      if (memErr) {
+        // If 406 or not found, mem will be null — continue to insert
+        if (memErr.code && memErr.code !== 'PGRST116') throw memErr
+      }
+      if (!mem) {
+        // Insert as guest (RLS allows this)
+        const ins = await supabase
+          .from('team_members')
+          .insert({ team_id: teamId.value, user_id: uid, role: 'guest' })
+          .select('id, role')
+          .single()
+        if (ins.error) throw ins.error
+        membershipId = ins.data.id
+        currentRole = ins.data.role
+      } else {
+        membershipId = mem.id
+        currentRole = mem.role
+      }
+    }
 
-      currentRole.value   = finalRole
-      requestedRole.value = reqRole
+    // 3) Role logic
+    const want = (roleWanted.value || 'guest').toLowerCase()
 
-      notice.value = reqRole
-        ? `Request for "${reqRole}" sent. You remain "guest" until an admin approves.`
-        : 'Profile updated.'
+    if (isAdmin.value) {
+      // Admins can change role directly (policy: tm: admins manage)
+      if (membershipId) {
+        const { error: updAdminErr } = await supabase
+          .from('team_members')
+          .update({ role: want, requested_role: null })
+          .eq('id', membershipId)
+        if (updAdminErr) throw updAdminErr
+        saveMsg.value = `Saved. Role set to ${want}.`
+      } else {
+        saveMsg.value = 'Saved profile. (No team selected, role unchanged.)'
+      }
     } else {
-      notice.value = 'Profile updated (no team selected).'
+      // Non-admins: keep role=guest; write requested_role for approval
+      if (membershipId) {
+        const update = { }    // keep role as guest to satisfy with_check policy
+        if (want !== 'guest') update.requested_role = want
+        const { error: updGuestErr } = await supabase
+          .from('team_members')
+          .update(update)
+          .eq('id', membershipId)
+        if (updGuestErr) throw updGuestErr
+        saveMsg.value = want !== 'guest'
+          ? `Saved. Request for "${want}" sent to admins.`
+          : 'Saved.'
+      } else {
+        saveMsg.value = 'Saved profile.'
+      }
     }
   } catch (e) {
-    error.value = e?.message || 'Failed to save changes.'
+    console.error('saveAccount error', e)
+    // Typical causes: RLS policy blocks, missing requested_role column, or no team selected
+    saveErr.value = e?.message || 'Save failed'
   } finally {
     saving.value = false
   }
 }
 
-onMounted(async () => {
-  await loadUser()
-  await loadTeams()
-  await loadMembership()
-  await loadBoatsForTeam()
-})
+onMounted(loadInitial)
 </script>
+
 
 <style scoped>
 .page { padding: 1rem; color:#fff; }
