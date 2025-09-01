@@ -1,127 +1,159 @@
 <template>
-  <div class="page">
-    <div class="glass">
-      <h2 class="title">Account</h2>
-      <p class="muted">Manage your profile, team, and boat selection.</p>
+  <div class="account-wrap">
+    <div class="card">
+      <h1>Account</h1>
+      <p class="subtitle">Manage your profile, team, and boat selection.</p>
 
-      <form class="form" @submit.prevent="save">
-        <!-- Names -->
-        <div class="grid">
-          <div>
-            <label>First name</label>
-            <input v-model.trim="firstName" type="text" required />
-          </div>
-          <div>
-            <label>Last name</label>
-            <input v-model.trim="lastName" type="text" required />
-          </div>
+      <div class="grid">
+        <!-- First / Last name -->
+        <div class="field">
+          <label>First name</label>
+          <input v-model="firstName" type="text" placeholder="First name" />
+        </div>
+        <div class="field">
+          <label>Last name</label>
+          <input v-model="lastName" type="text" placeholder="Last name" />
         </div>
 
-        <!-- Team + Boat -->
-        <div class="grid">
-          <div>
-            <label>Sailing team</label>
-            <select v-model="teamId" :disabled="loadingTeams">
-              <option value="">— Select team —</option>
-              <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>
-            </select>
-            <small class="muted" v-if="loadingTeams">Loading teams…</small>
-          </div>
-
-          <div>
-            <label>Boat</label>
-            <select v-model="boatId" :disabled="!teamId || loadingBoats">
-              <option value="">— Select boat —</option>
-              <option v-for="b in boats" :key="b.id" :value="b.id">{{ b.name }}</option>
-            </select>
-            <small class="muted" v-if="loadingBoats">Loading boats…</small>
-          </div>
+        <!-- Team / Boat -->
+        <div class="field">
+          <label>Sailing team</label>
+          <select v-model="teamId">
+            <option value="">— select team —</option>
+            <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Boat</label>
+          <select v-model="boatName">
+            <option value="">— select boat —</option>
+            <option v-for="b in boats" :key="b.id" :value="b.name">{{ b.name }}</option>
+          </select>
         </div>
 
-        <!-- Role -->
-        <div class="grid">
-          <div>
-            <label>User type</label>
-            <select v-model="role">
-              <option value="guest">Guest</option>
-              <option value="sailing team">Sailing team</option>
-              <option value="owner">Owner</option>
-              <option value="consultant">Consultant</option>
-              <option value="admin">Admin</option>
-            </select>
-            <small class="muted">
-              Non-admins requesting a higher role will be saved as <b>guest</b> until an admin approves.
-            </small>
-          </div>
-          <div class="readonly">
-            <label>Current access</label>
-            <div class="pill" :data-role="currentRole || 'guest'">{{ currentRole || 'guest' }}</div>
-            <small v-if="requestedRole" class="muted">
-              Requested: <b>{{ requestedRole }}</b> (pending admin approval)
-            </small>
-          </div>
+        <!-- Role / Current access -->
+        <div class="field">
+          <label>User type</label>
+          <select v-model="roleWanted">
+            <option v-for="r in roles" :key="r" :value="r">{{ prettyRole(r) }}</option>
+          </select>
+          <p class="muted" v-if="!isAdmin">
+            Non-admins requesting a higher role will be saved as <b>guest</b> until an admin approves.
+          </p>
         </div>
 
-        <div class="row">
-          <button class="btn primary" :disabled="saving">
-            {{ saving ? 'Saving…' : 'Save changes' }}
-          </button>
-          <span v-if="notice" class="notice">{{ notice }}</span>
-          <span v-if="error" class="error">{{ error }}</span>
+        <div class="field">
+          <label>Current access</label>
+          <div class="badge" :data-role="currentRole || 'guest'">
+            {{ prettyRole(currentRole || 'guest') }}
+          </div>
         </div>
-      </form>
+      </div>
+
+      <div class="actions">
+        <button class="btn" :disabled="saving" @click="saveAccount">
+          {{ saving ? 'Saving…' : 'Save' }}
+        </button>
+        <span class="ok" v-if="saveMsg">{{ saveMsg }}</span>
+        <span class="error" v-if="saveErr">{{ saveErr }}</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { supabase } from '../lib/supabase'
 
-const firstName = ref('')
-const lastName  = ref('')
-const teamId    = ref('')
-const boatName  = ref('')
-const roleWanted = ref('guest')   // selected in the dropdown (Admin / Sailing team / …)
+/** form state */
+const firstName   = ref('')
+const lastName    = ref('')
+const teamId      = ref('')
+const boatName    = ref('')
 
-const teams  = ref([])
-const boats  = ref([])
-const saving = ref(false)
-const saveMsg = ref('')
+/** lists */
+const teams = ref([])
+const boats = ref([])
+
+/** roles */
+const roles = ['admin', 'sailing team', 'owner', 'consultant', 'guest']
+const roleWanted  = ref('guest')   // what the user selects to request/have
+const currentRole = ref('guest')   // what DB currently says
+
+/** flags / feedback */
+const isAdmin = ref(false)
+const saving  = ref(false)
 const saveErr = ref('')
+const saveMsg = ref('')
 
-const isAdmin = ref(false)  // computed from membership
+function prettyRole(r){ return r ? r.charAt(0).toUpperCase() + r.slice(1) : '' }
 
+/** load boats when team changes */
+watch(teamId, async (newTeam) => {
+  boats.value = []
+  boatName.value = ''
+  if (!newTeam) return
+  const { data, error } = await supabase
+    .from('boats')
+    .select('id,name')
+    .eq('team_id', newTeam)
+    .order('name')
+  if (!error) boats.value = data || []
+})
+
+/** initial load */
 async function loadInitial() {
   saveErr.value = ''
-  // 1) auth user & metadata
+  saveMsg.value = ''
+  // 1) user + metadata
   const { data: udata, error: uerr } = await supabase.auth.getUser()
   if (uerr) { saveErr.value = uerr.message; return }
-  const meta = udata?.user?.user_metadata || {}
+  const user = udata?.user
+  const meta = user?.user_metadata || {}
   firstName.value = meta.first_name || ''
   lastName.value  = meta.last_name  || ''
   boatName.value  = meta.boat_name  || ''
   teamId.value    = meta.team_id    || ''
 
-  // 2) detect admin (any team)
-  const uid = udata?.user?.id
-  if (uid) {
-    const { data: mem } = await supabase
-      .from('team_members')
-      .select('team_id, role')
-      .eq('user_id', uid)
-    isAdmin.value = Array.isArray(mem) && mem.some(r => r.role === 'admin')
-  }
-
-  // 3) load teams/boats lists (adjust to your schema/policies)
+  // 2) teams
   const { data: trows } = await supabase.from('teams').select('id,name').order('name')
   teams.value = trows || []
+
+  // 3) boats (if team set)
   if (teamId.value) {
     const { data: brows } = await supabase.from('boats').select('id,name').eq('team_id', teamId.value).order('name')
     boats.value = brows || []
   }
+
+  // 4) membership: detect current role + admin
+  if (user?.id && teamId.value) {
+    const { data: mem } = await supabase
+      .from('team_members')
+      .select('role')
+      .eq('team_id', teamId.value)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    currentRole.value = mem?.role || 'guest'
+  } else {
+    currentRole.value = 'guest'
+  }
+
+  // 5) is admin on ANY team
+  if (user?.id) {
+    const { data: allmem } = await supabase
+      .from('team_members')
+      .select('role')
+      .eq('user_id', user.id)
+    isAdmin.value = Array.isArray(allmem) && allmem.some(r => r.role === 'admin')
+  } else {
+    isAdmin.value = false
+  }
+
+  // Default the dropdown to your current role (or guest)
+  roleWanted.value = currentRole.value || 'guest'
 }
 
+/** save */
 async function saveAccount() {
   saving.value = true
   saveErr.value = ''
@@ -132,7 +164,7 @@ async function saveAccount() {
     const uid = udata?.user?.id
     if (!uid) throw new Error('Not authenticated')
 
-    // 1) Update auth metadata (first/last/boat/team)
+    // 1) update auth metadata
     const { error: upMetaErr } = await supabase.auth.updateUser({
       data: {
         first_name: firstName.value?.trim(),
@@ -143,22 +175,19 @@ async function saveAccount() {
     })
     if (upMetaErr) throw upMetaErr
 
-    // 2) Ensure membership row exists
+    // 2) ensure membership row exists (as guest)
     let membershipId = null
-    let currentRole = 'guest'
+    let existingRole = 'guest'
     if (teamId.value) {
-      const { data: mem, error: memErr } = await supabase
+      const q = await supabase
         .from('team_members')
         .select('id, role')
         .eq('team_id', teamId.value)
         .eq('user_id', uid)
         .maybeSingle()
-      if (memErr) {
-        // If 406 or not found, mem will be null — continue to insert
-        if (memErr.code && memErr.code !== 'PGRST116') throw memErr
-      }
-      if (!mem) {
-        // Insert as guest (RLS allows this)
+      if (q.error && q.error.code && q.error.code !== 'PGRST116') throw q.error
+
+      if (!q.data) {
         const ins = await supabase
           .from('team_members')
           .insert({ team_id: teamId.value, user_id: uid, role: 'guest' })
@@ -166,48 +195,42 @@ async function saveAccount() {
           .single()
         if (ins.error) throw ins.error
         membershipId = ins.data.id
-        currentRole = ins.data.role
+        existingRole = ins.data.role
       } else {
-        membershipId = mem.id
-        currentRole = mem.role
+        membershipId = q.data.id
+        existingRole = q.data.role || 'guest'
       }
     }
 
-    // 3) Role logic
+    // 3) role changes
     const want = (roleWanted.value || 'guest').toLowerCase()
-
-    if (isAdmin.value) {
-      // Admins can change role directly (policy: tm: admins manage)
-      if (membershipId) {
-        const { error: updAdminErr } = await supabase
-          .from('team_members')
-          .update({ role: want, requested_role: null })
-          .eq('id', membershipId)
-        if (updAdminErr) throw updAdminErr
-        saveMsg.value = `Saved. Role set to ${want}.`
-      } else {
-        saveMsg.value = 'Saved profile. (No team selected, role unchanged.)'
-      }
+    if (isAdmin.value && membershipId) {
+      // Admins can set role directly
+      const { error: updAdminErr } = await supabase
+        .from('team_members')
+        .update({ role: want, requested_role: null })
+        .eq('id', membershipId)
+      if (updAdminErr) throw updAdminErr
+      currentRole.value = want
+      saveMsg.value = `Saved. Role set to ${prettyRole(want)}.`
+    } else if (membershipId) {
+      // Non-admin: keep role guest, write requested_role (column must exist)
+      const update = {}
+      if (want !== 'guest') update.requested_role = want
+      const { error: updGuestErr } = await supabase
+        .from('team_members')
+        .update(update)
+        .eq('id', membershipId)
+      if (updGuestErr) throw updGuestErr
+      currentRole.value = existingRole
+      saveMsg.value = want !== 'guest'
+        ? `Saved. Request for "${prettyRole(want)}" sent to admins.`
+        : 'Saved.'
     } else {
-      // Non-admins: keep role=guest; write requested_role for approval
-      if (membershipId) {
-        const update = { }    // keep role as guest to satisfy with_check policy
-        if (want !== 'guest') update.requested_role = want
-        const { error: updGuestErr } = await supabase
-          .from('team_members')
-          .update(update)
-          .eq('id', membershipId)
-        if (updGuestErr) throw updGuestErr
-        saveMsg.value = want !== 'guest'
-          ? `Saved. Request for "${want}" sent to admins.`
-          : 'Saved.'
-      } else {
-        saveMsg.value = 'Saved profile.'
-      }
+      saveMsg.value = 'Saved profile.'
     }
   } catch (e) {
     console.error('saveAccount error', e)
-    // Typical causes: RLS policy blocks, missing requested_role column, or no team selected
     saveErr.value = e?.message || 'Save failed'
   } finally {
     saving.value = false
@@ -217,45 +240,92 @@ async function saveAccount() {
 onMounted(loadInitial)
 </script>
 
-
 <style scoped>
-.page { padding: 1rem; color:#fff; }
-.glass {
-  background: rgba(255,255,255,.12);
-  border: 1px solid rgba(255,255,255,.25);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: 16px;
+.account-wrap {
+  min-height: calc(100vh - 80px);
+  display: grid;
+  place-items: start center;
   padding: 16px;
-  box-shadow: 0 8px 30px rgba(0,0,0,.18);
+  color: #fff;
 }
 
-.title { margin:0 0 .3rem 0; }
-.muted { opacity:.85; margin-bottom:.8rem; }
-
-.form { display:grid; gap: 14px; }
-.grid { display:grid; gap:14px; grid-template-columns: repeat(2, minmax(0,1fr)); }
-@media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
-
-label { display:block; font-size:.9rem; opacity:.92; margin-bottom:.25rem; }
-input, select {
-  width:100%; padding:.65rem .8rem; border-radius:10px;
-  border:1px solid rgba(255,255,255,.35);
+.card {
+  width: min(1100px, 96vw);
   background: rgba(255,255,255,.08);
-  color:#fff; outline:none;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 18px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 18px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
 }
-select:disabled, input:disabled { opacity:.7; cursor:not-allowed; }
 
-.row { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
-.btn { border:0; border-radius:12px; padding:.7rem 1rem; cursor:pointer; color:#0b2239; }
-.btn.primary { background:linear-gradient(135deg,#4facfe,#00f2fe); font-weight:800; }
+h1 {
+  margin: 0 0 .25rem 0;
+  font-size: 2rem;
+}
+.subtitle {
+  margin: 0 0 1rem 0;
+  opacity: .9;
+}
 
-.notice { color:#fff7d6; background:rgba(255,198,0,.12); border:1px solid rgba(255,198,0,.25); padding:.5rem .6rem; border-radius:10px; }
-.error  { color:#ffd4d4; background:rgba(255,0,0,.12);   border:1px solid rgba(255,0,0,.25);   padding:.5rem .6rem; border-radius:10px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+@media (max-width: 900px){
+  .grid { grid-template-columns: 1fr; }
+}
 
-.readonly .pill {
-  display:inline-block; padding:.4rem .6rem; border-radius:999px;
-  background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.25);
-  text-transform:capitalize; font-weight:700; color:#fff;
+.field { display: flex; flex-direction: column; gap: 6px; }
+label { font-weight: 700; opacity: .95; }
+
+input, select {
+  width: 100%;
+  padding: .75rem .9rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.25);
+  background: rgba(255,255,255,.06);
+  color: #fff;
+  outline: none;
+}
+input::placeholder { color: rgba(255,255,255,.5); }
+
+.badge {
+  display: inline-block;
+  padding: .4rem .7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.35);
+  background: rgba(255,255,255,.12);
+  font-weight: 800;
+}
+
+.muted { margin: .4rem 0 0; opacity: .85; }
+
+.actions {
+  display: flex; align-items: center; gap: .75rem;
+  margin-top: 16px;
+}
+.btn {
+  background: linear-gradient(180deg, #4cc9f0, #4895ef);
+  color: #0a0b0f;
+  border: none;
+  border-radius: 12px;
+  padding: .7rem 1rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+
+.ok {
+  color:#d7ffd7; background:rgba(0,200,0,.12);
+  border:1px solid rgba(0,200,0,.25);
+  padding:.5rem .6rem; border-radius:10px;
+}
+.error {
+  color:#ffd4d4; background:rgba(255,0,0,.12);
+  border:1px solid rgba(255,0,0,.25);
+  padding:.5rem .6rem; border-radius:10px;
 }
 </style>
