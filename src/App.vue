@@ -163,7 +163,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { supabase } from '../lib/supabase'
+import { supabase } from './lib/supabase'
 import FlipCard from '../components/FlipCard.vue'
 
 /** -------- User boat (from auth metadata; fallback allowed) -------- */
