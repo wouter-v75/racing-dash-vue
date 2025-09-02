@@ -1,5 +1,6 @@
 <template>
   <div class="results-page">
+    <!-- Toolbar -->
     <div class="toolbar">
       <div class="left">
         <label>Event</label>
@@ -9,11 +10,17 @@
             {{ r.name }} <span v-if="r.location">• {{ r.location }}</span>
           </option>
         </select>
+
+        <label v-if="classes.length">Class</label>
+        <select v-if="classes.length" v-model="selectedClassId" @change="reloadClassData">
+          <option v-for="c in classes" :key="c.id" :value="c.id">{{ classLabel(c) }}</option>
+        </select>
       </div>
+
       <div class="right">
-        <a v-if="currentEvent?.event_url" :href="currentEvent.event_url" target="_blank" rel="noopener" class="btn link">
-          Open event site
-        </a>
+        <a v-if="currentEvent?.event_url"
+           :href="currentEvent.event_url" target="_blank" rel="noopener"
+           class="btn link">Open event site</a>
         <span class="pill" v-if="boatName">Boat: {{ boatName }}</span>
         <button class="btn ghost" @click="reloadAll" :disabled="loading.any">Refresh</button>
       </div>
@@ -22,67 +29,31 @@
     <p v-if="!selectedRegattaId" class="empty big">Choose an event to load results.</p>
     <p v-if="err" class="error">{{ err }}</p>
 
-    <!-- Overall -->
-    <div v-if="selectedRegattaId" class="card">
-      <FlipCard>
-        <template #front>
-          <h3 class="card-title">Overall Standings</h3>
-          <div v-if="!overallReady" class="empty">Loading…</div>
-          <div v-else class="stats">
-            <div class="stat"><div class="k">Position</div><div class="v">{{ myOverall?.position || '–' }}</div></div>
-            <div class="stat"><div class="k">Total</div><div class="v">{{ myOverall?.total || myOverall?.points || '–' }}</div></div>
-            <div class="stat"><div class="k">Net</div><div class="v">{{ myOverall?.points || '–' }}</div></div>
-          </div>
-          <p class="hint">Click card to flip</p>
-        </template>
-        <template #back>
-          <h3 class="card-title">Overall — full table</h3>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>#</th><th>Boat</th><th>Sail #</th><th>Skipper</th><th>Pts</th><th>Total</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in overallRows" :key="row._key" :class="{ me: isMe(row.name) }">
-                  <td>{{ row.position }}</td>
-                  <td>{{ row.name }}</td>
-                  <td>{{ row.sailNo }}</td>
-                  <td>{{ row.skipper }}</td>
-                  <td>{{ row.points }}</td>
-                  <td>{{ row.total }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </template>
-      </FlipCard>
-    </div>
-
-    <!-- Race cards: one per race -->
-    <div class="grid">
-      <div class="card" v-for="r in races" :key="r.id">
+    <div v-if="selectedRegattaId">
+      <!-- LAST RACE (on top) -->
+      <div class="card">
         <FlipCard>
           <template #front>
-            <h3 class="card-title">{{ r.label }}</h3>
-            <div v-if="!raceTables[r.id]" class="empty">Loading…</div>
+            <h3 class="card-title">Last race — {{ lastRaceTitle }}</h3>
+            <div v-if="!lastRaceRows.length" class="empty">Loading…</div>
             <div v-else class="stats">
-              <div class="stat"><div class="k">Position</div><div class="v">{{ raceSummaries[r.id]?.position || '–' }}</div></div>
-              <div class="stat"><div class="k">Finish</div><div class="v">{{ raceSummaries[r.id]?.finishTime || '–' }}</div></div>
-              <div class="stat"><div class="k">Δ to 1st</div><div class="v">{{ raceSummaries[r.id]?.deltaToFirst || '–' }}</div></div>
-              <div class="stat"><div class="k">Δ in front</div><div class="v">{{ raceSummaries[r.id]?.deltaAhead || '–' }}</div></div>
-              <div class="stat"><div class="k">Δ behind</div><div class="v">{{ raceSummaries[r.id]?.deltaBehind || '–' }}</div></div>
+              <div class="stat"><div class="k">Position</div><div class="v">{{ lastRaceSummary.position }}</div></div>
+              <div class="stat"><div class="k">Finish</div><div class="v">{{ lastRaceSummary.finishTime }}</div></div>
+              <div class="stat"><div class="k">Δ to 1st</div><div class="v">{{ lastRaceSummary.deltaToFirst }}</div></div>
+              <div class="stat"><div class="k">Δ in front</div><div class="v">{{ lastRaceSummary.deltaAhead }}</div></div>
+              <div class="stat"><div class="k">Δ behind</div><div class="v">{{ lastRaceSummary.deltaBehind }}</div></div>
             </div>
             <p class="hint">Click card to flip</p>
           </template>
           <template #back>
-            <h3 class="card-title">{{ r.label }} — full table</h3>
+            <h3 class="card-title">Last race — full table</h3>
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th><th>Δ to 1st</th></tr>
+                  <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th><th>Δ to first</th></tr>
                 </thead>
                 <tbody>
-                  <tr v-for="row in raceTables[r.id]" :key="row._key" :class="{ me: isMe(row.name) }">
+                  <tr v-for="row in lastRaceRows" :key="row._key" :class="{me: isMe(row.name)}">
                     <td>{{ row.position }}</td>
                     <td>{{ row.name }}</td>
                     <td>{{ row.finishTime }}</td>
@@ -95,6 +66,81 @@
           </template>
         </FlipCard>
       </div>
+
+      <!-- OVERALL (middle) -->
+      <div class="card">
+        <FlipCard>
+          <template #front>
+            <h3 class="card-title">Overall — {{ selectedClassId || '—' }}</h3>
+            <div v-if="!overallRows.length" class="empty">Loading…</div>
+            <div v-else class="stats">
+              <div class="stat"><div class="k">Position</div><div class="v">{{ myOverall?.position || '–' }}</div></div>
+              <div class="stat"><div class="k">Total</div><div class="v">{{ myOverall?.total || myOverall?.points || '–' }}</div></div>
+              <div class="stat"><div class="k">Net</div><div class="v">{{ myOverall?.points || '–' }}</div></div>
+            </div>
+            <p class="hint">Click card to flip</p>
+          </template>
+          <template #back>
+            <h3 class="card-title">Overall — standings ({{ selectedClassId }})</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>#</th><th>Boat</th><th>Sail #</th><th>Skipper</th><th>Pts</th><th>Total</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in overallRows" :key="row._key" :class="{me: isMe(row.name)}">
+                    <td>{{ row.position }}</td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.sailNo }}</td>
+                    <td>{{ row.skipper }}</td>
+                    <td>{{ row.points }}</td>
+                    <td>{{ row.total }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </FlipCard>
+      </div>
+
+      <!-- OTHER RACES (bottom) -->
+      <div class="grid">
+        <div class="card" v-for="r in otherRaces" :key="r.id">
+          <FlipCard>
+            <template #front>
+              <h3 class="card-title">RACE {{ r.id }} — {{ selectedClassId }}</h3>
+              <div v-if="!raceTables[r.id]" class="empty">Loading…</div>
+              <div v-else class="stats">
+                <div class="stat"><div class="k">Position</div><div class="v">{{ raceSummaries[r.id]?.position || '–' }}</div></div>
+                <div class="stat"><div class="k">Finish</div><div class="v">{{ raceSummaries[r.id]?.finishTime || '–' }}</div></div>
+                <div class="stat"><div class="k">Δ to 1st</div><div class="v">{{ raceSummaries[r.id]?.deltaToFirst || '–' }}</div></div>
+                <div class="stat"><div class="k">Δ in front</div><div class="v">{{ raceSummaries[r.id]?.deltaAhead || '–' }}</div></div>
+                <div class="stat"><div class="k">Δ behind</div><div class="v">{{ raceSummaries[r.id]?.deltaBehind || '–' }}</div></div>
+              </div>
+              <p class="hint">Click card to flip</p>
+            </template>
+            <template #back>
+              <h3 class="card-title">RACE {{ r.id }} — full table</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th><th>Δ to first</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in raceTables[r.id]" :key="row._key" :class="{me: isMe(row.name)}">
+                      <td>{{ row.position }}</td>
+                      <td>{{ row.name }}</td>
+                      <td>{{ row.finishTime }}</td>
+                      <td>{{ row.correctedTime }}</td>
+                      <td>{{ row.deltaToFirst }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </FlipCard>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -104,9 +150,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { supabase } from '../lib/supabase'
 import FlipCard from '../components/FlipCard.vue'
 
-const API_BASE = import.meta.env.VITE_API_BASE || '' // leave blank on Vercel
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
-/* user boat name for highlighting (pull from auth metadata if available) */
+/* boat name highlight from auth metadata (if any) */
 const boatName = ref('')
 async function loadBoatFromUser(){
   const { data } = await supabase.auth.getUser()
@@ -114,7 +160,7 @@ async function loadBoatFromUser(){
 }
 function isMe(name=''){ return boatName.value && name?.toUpperCase() === boatName.value.toUpperCase() }
 
-/* data from Supabase: regattas list */
+/* events */
 const regattas = ref([])
 const selectedRegattaId = ref('')
 const currentEvent = computed(() => regattas.value.find(r => r.id === selectedRegattaId.value) || null)
@@ -127,26 +173,59 @@ async function loadRegattas() {
     .order('starts_on', { ascending: false })
   if (!error) {
     regattas.value = data || []
-    // Prefer Maxi Worlds 2024 if present
     const maxi = regattas.value.find(r => (r.event_id || '').toLowerCase() === 'xolfq')
     selectedRegattaId.value = maxi?.id || regattas.value[0]?.id || ''
   }
 }
-const evId  = () => currentEvent.value?.event_id || ''
-const clsDb = () => currentEvent.value?.class_id || ''
+const evId = () => currentEvent.value?.event_id || ''
 
-/* UI state */
-const classes = ref([])   // [{id,label}]
-const races = ref([])     // [{id,label}]
-const overallRows = ref([])  // table
-const overallReady = ref(false)
+/* classes & selection */
+const classes = ref([])           // [{id,label}]
+const selectedClassId = ref('')
+
+function classLabel(c){ return c?.id || '—' }
+
+async function loadClasses(){
+  classes.value = []
+  const json = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
+  // Use id (M1, M2, …) as label; incoming labels are just "Overall"
+  classes.value = (json.results || []).map(x => ({ id: x.id, label: x.id }))
+  // If DB has a default class, you can pre-select it; else default M2 if present
+  selectedClassId.value = classes.value.find(c => c.id === 'M2')?.id || classes.value[0]?.id || ''
+}
+
+/* races for the event (IDs only) */
+const races = ref([]) // [{id,label}]
+async function loadRaces(){
+  races.value = []
+  const json = await api(`/api/results-orc?type=races&eventId=${encodeURIComponent(evId())}`)
+  // title them as "RACE <id>"
+  races.value = (json.results || []).map(r => ({ id: r.id, label: `RACE ${r.id}` }))
+}
+
+/* LAST race specifics for xolfq: raceId=13 with NO class in URL */
+const forcedLastRaceByEvent = { xolfq: '13' }
+const lastRaceId = computed(() => forcedLastRaceByEvent[evId()] || (races.value.at(-1)?.id || ''))
+const lastRaceTitle = computed(() => lastRaceId.value ? `RACE ${lastRaceId.value}` : 'RACE —')
+
+const lastRaceRows = ref([])
+const lastRaceSummary = ref({ position:'–', finishTime:'–', deltaToFirst:'–', deltaAhead:'–', deltaBehind:'–' })
+
+/* overall & race tables */
+const overallRows = ref([])
 const raceTables = ref({})      // {raceId: []}
 const raceSummaries = ref({})   // {raceId: {...}}
 
+const myOverall = computed(() => overallRows.value.find(r => isMe(r.name)))
+
+/* filtered races: exclude last race in the bottom grid */
+const otherRaces = computed(() => races.value.filter(r => r.id !== lastRaceId.value))
+
+/* loading & error */
 const err = ref('')
 const loading = ref({
-  classes:false, races:false, overall:false, racesets:false,
-  get any(){ return this.classes||this.races||this.overall||this.racesets }
+  classes:false, races:false, overall:false, last:false, sets:false,
+  get any(){ return this.classes||this.races||this.overall||this.last||this.sets }
 })
 
 /* helpers */
@@ -171,41 +250,47 @@ function mmssDelta(a,b){
 }
 
 /* loaders */
-async function loadClasses(){
-  classes.value = []; loading.value.classes = true; err.value=''
-  try {
-    const json = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
-    classes.value = json.results || []
-  } catch(e){ err.value = `Classes: ${e.message}` }
-  finally { loading.value.classes = false }
-}
-
-async function loadRaces(){
-  races.value = []; loading.value.races = true
-  try {
-    const json = await api(`/api/results-orc?type=races&eventId=${encodeURIComponent(evId())}`)
-    races.value = json.results || []
-  } catch(e){ err.value = `Races: ${e.message}` }
-  finally { loading.value.races = false }
-}
-
 async function reloadOverall(){
-  overallReady.value = false; loading.value.overall = true
+  overallRows.value = []; loading.value.overall = true
   try {
-    const classId = clsDb() || classes.value[0]?.id || ''
-    if (!classId) { overallRows.value = []; overallReady.value = true; return }
-    const json = await api(`/api/results-orc?type=overall&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(classId)}`)
+    if (!selectedClassId.value) return
+    const json = await api(`/api/results-orc?type=overall&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
     overallRows.value = (json.results || []).map((r,i)=>({ ...r, _key:'ov'+i }))
-    overallReady.value = true
   } catch(e){ err.value = `Overall: ${e.message}` }
   finally { loading.value.overall = false }
 }
 
-async function loadAllRaceTables(){
-  raceTables.value = {}; raceSummaries.value = {}; loading.value.racesets = true
+async function reloadLastRace(){
+  lastRaceRows.value = []; lastRaceSummary.value = { position:'–', finishTime:'–', deltaToFirst:'–', deltaAhead:'–', deltaBehind:'–' }
+  loading.value.last = true
   try {
-    for (const r of races.value) {
-      const json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(r.id)}`)
+    if (!lastRaceId.value) return
+    // Raw race (no class in URL), per your instruction
+    const json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}`)
+    const rows = (json.results || []).map((r,i)=>({ ...r, _key:'last-'+i }))
+    lastRaceRows.value = rows
+
+    const idx = rows.findIndex(r => isMe(r.name))
+    const me = rows[idx]
+    const ahead  = idx>0 ? rows[idx-1] : null
+    const behind = idx>=0 && idx<rows.length-1 ? rows[idx+1] : null
+
+    lastRaceSummary.value = {
+      position: me?.position || '–',
+      finishTime: me?.finishTime || '–',
+      deltaToFirst: me?.deltaToFirst || '–',
+      deltaAhead: (ahead && ahead.correctedTime && me?.correctedTime) ? mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
+      deltaBehind: (behind && behind.correctedTime && me?.correctedTime) ? mmssDelta(me.correctedTime, behind.correctedTime) : '–'
+    }
+  } catch(e){ err.value = `Last race: ${e.message}` }
+  finally { loading.value.last = false }
+}
+
+async function loadOtherRaceTables(){
+  raceTables.value = {}; raceSummaries.value = {}; loading.value.sets = true
+  try {
+    for (const r of otherRaces.value) {
+      const json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}&raceId=${encodeURIComponent(r.id)}`)
       const rows = (json.results || []).map((row,i)=>({ ...row, _key:`${r.id}-${i}` }))
       raceTables.value[r.id] = rows
 
@@ -223,31 +308,33 @@ async function loadAllRaceTables(){
       }
     }
   } catch(e){ err.value = `Race tables: ${e.message}` }
-  finally { loading.value.racesets = false }
+  finally { loading.value.sets = false }
 }
 
-/* orchestrator */
+/* orchestration */
+async function reloadClassData() {
+  await reloadOverall()
+  await reloadLastRace()
+  await loadOtherRaceTables()
+}
 async function reloadAll(){
   if (!selectedRegattaId.value) return
   await loadClasses()
   await loadRaces()
-  await reloadOverall()
-  await loadAllRaceTables()
+  await reloadClassData()
 }
 
-/* react to regatta change */
+/* react to event change */
 watch(selectedRegattaId, reloadAll)
 
 onMounted(async () => {
   await Promise.all([loadBoatFromUser(), loadRegattas()])
   if (selectedRegattaId.value) await reloadAll()
 })
-
-const myOverall = computed(() => overallRows.value.find(r => isMe(r.name)))
 </script>
 
 <style scoped>
-.results-page { color:#fff; padding: 12px; }
+.results-page { color:#fff; padding:12px; }
 
 /* toolbar */
 .toolbar { display:flex; justify-content:space-between; align-items:center; gap:.8rem; margin-bottom:.9rem; }
@@ -270,10 +357,8 @@ select {
 
 .card { min-height:220px; }
 
-/* glass face lives inside FlipCard; we still style contents */
+/* contents */
 .card-title { margin:0 0 .6rem 0; }
-
-/* stats blocks */
 .stats { display:grid; gap:10px; grid-template-columns: repeat(3, minmax(0,1fr)); }
 .stat { background: rgba(255,255,255,.06); padding:.7rem .8rem; border-radius:10px; }
 .k { font-size:.8rem; opacity:.9; }
