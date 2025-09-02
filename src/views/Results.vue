@@ -31,13 +31,19 @@
 
     <p v-if="!selectedRegattaId" class="empty big">Choose an event to load results.</p>
     <p v-if="err" class="error">{{ err }}</p>
+    
+    <!-- Quick test info -->
+    <div v-if="selectedRegattaId && !boatName" class="empty big">
+      No boat name set. Go to <router-link to="/account">Account</router-link> to set your boat name.
+      <br><small style="opacity:0.7">💡 Console tip: <code>setTestBoat("NORTHSTAR OF LONDON")</code> to test</small>
+    </div>
 
     <div v-if="selectedRegattaId" class="grid">
       <!-- LAST RACE (left) -->
       <div class="card">
         <FlipCard>
           <template #front>
-            <h3 class="card-title">{{ lastRaceTitle }} — {{ selectedClassId || '—' }}</h3>
+            <h3 class="card-title">{{ lastRaceTitle }}</h3>
             <div v-if="loading.last" class="empty">Loading…</div>
             <div v-else-if="!lastRaceRows.length" class="empty">No data.</div>
             <div v-else class="stats">
@@ -50,7 +56,7 @@
             <p class="hint">Click card to flip</p>
           </template>
           <template #back>
-            <h3 class="card-title">{{ lastRaceTitle }} — full table ({{ selectedClassId || '—' }})</h3>
+            <h3 class="card-title">{{ lastRaceTitle }} — full table</h3>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -158,11 +164,25 @@ async function loadBoatFromUser(){
   const { data } = await supabase.auth.getUser()
   boatName.value = data?.user?.user_metadata?.boat_name || ''
   console.log('Loaded boat name from user metadata:', boatName.value)
+  console.log('💡 To test with NORTHSTAR OF LONDON, run: setTestBoat("NORTHSTAR OF LONDON")')
 }
 function isMe(name=''){
-  const match = boatName.value && (name || '').toUpperCase() === boatName.value.toUpperCase()
+  if (!boatName.value) return false
+  
+  // Normalize both names for comparison
+  const userBoat = boatName.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const racingBoat = (name || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  
+  // Try exact match first
+  const exactMatch = userBoat === racingBoat
+  
+  // Try partial matches (handles "NORTHSTAR OF LONDON" vs "NORTHSTAR")
+  const partialMatch = userBoat.includes(racingBoat) || racingBoat.includes(userBoat)
+  
+  const match = exactMatch || (racingBoat.length > 3 && partialMatch)
+  
   if (boatName.value) {
-    console.log(`Boat name matching: looking for "${boatName.value}" vs "${name}" = ${match}`)
+    console.log(`Boat matching: "${boatName.value}" (${userBoat}) vs "${name}" (${racingBoat}) = ${match ? 'MATCH' : 'no match'}`)
   }
   return match
 }
@@ -196,10 +216,11 @@ async function loadClasses(){
   const json = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
   classes.value = (json.results || []).map(x => ({ id: x.id, label: x.id }))
   
-  // For xolfq event, try to find the correct IRC class, otherwise default to M2, then first available
+  // For xolfq event, default to M2 (NORTHSTAR OF LONDON's class), otherwise try IRC, then first available
   if (evId() === 'xolfq') {
-    const ircClass = classes.value.find(c => /^(IRC|M)/i.test(c.id))
-    selectedClassId.value = ircClass?.id || classes.value[0]?.id || ''
+    const m2Class = classes.value.find(c => c.id === 'M2')
+    const ircClass = classes.value.find(c => /^IRC/i.test(c.id))
+    selectedClassId.value = m2Class?.id || ircClass?.id || classes.value[0]?.id || ''
   } else {
     // Default to M2 if present for other events, else first
     selectedClassId.value = classes.value.find(c => c.id === 'M2')?.id || classes.value[0]?.id || ''
@@ -212,10 +233,11 @@ async function loadClasses(){
 /* races (scoped to class) */
 const races = ref([]) // [{id,label,classRaceNumber}]
 
-// Mapping from ORC race ID to class race number for specific events
+// Mapping from ORC race ID to class race number for specific events  
 const raceNumberMappings = {
   'xolfq': {
-    'M2': { '13': 4 }, // Race 13 on ORC = Race 4 for class M2
+    'M2': { '6': 1, '8': 2, '13': 3 }, // M2/IRC72 class: ORC races 6,8,13 = Class races 1,2,3
+    'IRC72': { '6': 1, '8': 2, '13': 3 }, // Same mapping for IRC72 alias
     // Add more class mappings as needed
   }
 }
@@ -231,6 +253,24 @@ function getClassRaceNumber(orcRaceId, eventId, classId) {
 async function loadRacesForClass(){
   races.value = []
   if (!evId() || !selectedClassId.value) return
+  
+  // For xolfq event with M2/IRC72 class, use specific race IDs
+  if (evId() === 'xolfq' && (selectedClassId.value === 'M2' || selectedClassId.value === 'IRC72')) {
+    const raceIds = ['6', '8', '13'] // ORC race IDs for M2/IRC72 class
+    races.value = raceIds.map((raceId, index) => {
+      const classRaceNumber = getClassRaceNumber(raceId, evId(), selectedClassId.value) || (index + 1)
+      return {
+        id: raceId,
+        label: `RACE ${classRaceNumber}`,
+        classRaceNumber: classRaceNumber,
+        orcRaceId: raceId
+      }
+    })
+    console.log('Using specific race IDs for M2/IRC72:', races.value)
+    return
+  }
+  
+  // Default behavior: load all races for the class from the ORC page
   const json = await api(`/api/results-orc?type=racesForClass&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
   races.value = (json.results || []).map((r, index) => {
     const classRaceNumber = getClassRaceNumber(r.id, evId(), selectedClassId.value)
@@ -245,12 +285,19 @@ async function loadRacesForClass(){
 }
 
 /* "forced" last race for xolfq (13), otherwise fall back to last available id */
-const forcedLastRaceByEvent = { xolfq: '13' }
+const forcedLastRaceByEvent = { 
+  'xolfq': '13' // This is Race 3 for M2/IRC72 class
+}
 const lastRaceId = computed(() => forcedLastRaceByEvent[evId()] || (races.value.at(-1)?.id || ''))
 const lastRaceTitle = computed(() => {
   if (!lastRaceId.value) return 'RACE —'
   const race = races.value.find(r => r.id === lastRaceId.value)
-  return race ? race.label : `RACE ${lastRaceId.value}`
+  if (race) {
+    return `${race.label} — ${selectedClassId.value || '—'}`
+  }
+  // Fallback: show class race number if we have mapping
+  const classRaceNumber = getClassRaceNumber(lastRaceId.value, evId(), selectedClassId.value)
+  return classRaceNumber ? `RACE ${classRaceNumber}` : `RACE ${lastRaceId.value}`
 })
 
 /* datasets */
@@ -347,6 +394,16 @@ async function debugBoatFinding() {
   }
 }
 
+// Test function to quickly switch boat name for debugging
+async function setTestBoat(name) {
+  console.log(`🚢 Setting test boat to: ${name}`)
+  boatName.value = name
+  await reloadAll()
+}
+
+// Expose test function globally for console access
+window.setTestBoat = setTestBoat
+
 /* loaders */
 async function reloadOverall(){
   overallRows.value = []; loading.value.overall = true
@@ -375,7 +432,13 @@ async function reloadLastRace(){
     // summary for user's boat, with ahead/behind deltas
     const idx = rows.findIndex(r => isMe(r.name))
     const me = rows[idx]
-    console.log(`Last race: found ${rows.length} boats, user boat index: ${idx}`, me ? `(${me.name})` : '(not found)')
+    console.log(`Last race: found ${rows.length} boats, user boat index: ${idx}`, me ? `(${me.name} - ${me.finishTime})` : '(not found)')
+    
+    // Special handling for DNF/RET boats
+    if (me && /^(DNF|DNS|DSQ|DNC|RET)$/i.test(me.finishTime)) {
+      console.log(`⚠️ Boat has special status: ${me.finishTime}`)
+    }
+    
     const ahead  = idx>0 ? rows[idx-1] : null
     const behind = idx>=0 && idx<rows.length-1 ? rows[idx+1] : null
 
