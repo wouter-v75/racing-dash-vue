@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   try {
     const q = req.query || {}
     const eventId = String(q.eventId || 'xolfq')
-    const boatName = String(q.boatName || 'PROTEUS')
+    const boatName = String(q.boatName || 'NORTHSTAR OF LONDON')
 
     console.log(`🔍 Starting systematic boat analysis for: "${boatName}" in event: ${eventId}`)
 
@@ -47,10 +47,16 @@ export default async function handler(req, res) {
         const entryUrl = `https://data.orc.org/public/WEV.dll?action=entries&eventid=${eventId}&classid=${cls.id}`
         const entryHtml = await fetchText(entryUrl)
         const boats = extractBoatsFromEntryList(entryHtml)
-        const boatMatch = boats.find(b => 
-          b.name.toUpperCase().includes(boatName.toUpperCase()) || 
-          boatName.toUpperCase().includes(b.name.toUpperCase())
-        )
+        const boatMatch = boats.find(b => {
+          // Normalize boat names for comparison
+          const userBoat = boatName.toUpperCase().replace(/[^A-Z0-9]/g, '')
+          const listBoat = b.name.toUpperCase().replace(/[^A-Z0-9]/g, '')
+          
+          // Try exact match or partial match
+          return userBoat === listBoat || 
+                 (userBoat.length > 3 && listBoat.length > 3 && 
+                  (userBoat.includes(listBoat) || listBoat.includes(userBoat)))
+        })
         
         entryAnalysis[cls.id] = {
           boats: boats,
@@ -355,6 +361,29 @@ async function parseBoatData(eventId, classId, targetBoat) {
     const raceResults = parseTableForBoat(raceHtml, targetBoat, 'race', classId)
     data.lastRace = raceResults
     
+    // For M2/IRC72 class, also check races 6 and 8
+    if (classId === 'M2' || classId === 'IRC72') {
+      const otherRaceIds = ['6', '8']
+      data.otherRaces = []
+      
+      for (const raceId of otherRaceIds) {
+        try {
+          const raceUrl = `https://data.orc.org/public/WEV.dll?action=race&eventid=${eventId}&raceid=${raceId}`
+          const raceHtml = await fetchText(raceUrl)
+          const raceResults = parseTableForBoat(raceHtml, targetBoat, 'race', classId)
+          data.otherRaces.push({
+            raceId: raceId,
+            results: raceResults
+          })
+        } catch (e) {
+          data.otherRaces.push({
+            raceId: raceId,
+            error: e.message
+          })
+        }
+      }
+    }
+    
   } catch (e) {
     data.error = e.message
   }
@@ -422,14 +451,19 @@ function parseTableForBoat(html, targetBoat, tableType, classFilter = null) {
         elapsed: cells[6] || '',
         corrected: cells[7] || '',
         points: cells[8] || '',
+        status: /^(DNF|DNS|DSQ|DNC|RET)$/i.test(cells[5]) ? cells[5] : 'FINISHED',
         allCells: cells
       }
       
       result.allBoats.push(boatEntry)
       
       // Check if this is our target boat
-      if (boatName.toUpperCase().includes(targetBoat.toUpperCase()) || 
-          targetBoat.toUpperCase().includes(boatName.toUpperCase())) {
+      const normalizedTarget = targetBoat.toUpperCase().replace(/[^A-Z0-9]/g, '')
+      const normalizedBoat = boatName.toUpperCase().replace(/[^A-Z0-9]/g, '')
+      
+      if (normalizedTarget === normalizedBoat || 
+          (normalizedTarget.length > 3 && normalizedBoat.length > 3 && 
+           (normalizedTarget.includes(normalizedBoat) || normalizedBoat.includes(normalizedTarget)))) {
         result.found = true
         result.boatData = boatEntry
       }
