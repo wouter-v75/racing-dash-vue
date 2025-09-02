@@ -4,15 +4,15 @@
     <div class="toolbar">
       <div class="left">
         <label>Event</label>
-        <select v-model="selectedRegattaId" @change="reloadAll" :disabled="regattas.length===0">
+        <select v-model="selectedRegattaId" @change="findBoatAndLoad" :disabled="regattas.length===0">
           <option disabled value="">— select event —</option>
           <option v-for="r in regattas" :key="r.id" :value="r.id">
             {{ r.name }} <span v-if="r.location">• {{ r.location }}</span>
           </option>
         </select>
 
-        <label v-if="classes.length">Class</label>
-        <select v-if="classes.length" v-model="selectedClassId">
+        <label v-if="detectedClass">Auto-detected Class</label>
+        <select v-if="detectedClass" v-model="selectedClassId" @change="reloadClassData">
           <option v-for="c in classes" :key="c.id" :value="c.id">{{ c.id }}</option>
         </select>
       </div>
@@ -21,151 +21,154 @@
         <a v-if="currentEvent?.event_url"
            :href="currentEvent.event_url" target="_blank" rel="noopener"
            class="btn link">Open event site</a>
-        <span class="pill" v-if="boatName">Boat: {{ boatName }}</span>
-        <button class="btn ghost" @click="reloadAll" :disabled="loading.any">Refresh</button>
-        <button class="btn debug" @click="toggleDebug" :class="{active: showDebug}">🔍 Debug</button>
+        <span class="pill" v-if="boatName">{{ boatName }}</span>
+        <button class="btn" @click="findBoatAndLoad" :disabled="loading.any">🔍 Find My Boat</button>
+        <button class="btn ghost" @click="reloadClassData" :disabled="loading.any">Refresh</button>
       </div>
     </div>
 
-    <p v-if="!selectedRegattaId" class="empty big">Choose an event to load results.</p>
+    <p v-if="!selectedRegattaId" class="empty big">Choose an event to find your boat.</p>
     <p v-if="err" class="error">{{ err }}</p>
 
-    <!-- Debug Panel -->
-    <div v-if="showDebug" class="card debug-panel">
-      <h3>🛠 Debug Information</h3>
-      <div class="debug-grid">
-        <div>
-          <strong>Configuration:</strong>
-          <ul>
-            <li>Event ID: {{ evId() }}</li>
-            <li>Class: {{ selectedClassId }}</li>
-            <li>Target Boat: "{{ boatName }}"</li>
-            <li>Last Race ID: {{ lastRaceId }}</li>
-          </ul>
-        </div>
-        <div>
-          <strong>Data Status:</strong>
-          <ul>
-            <li>Overall rows: {{ overallRows.length }}</li>
-            <li>Last race rows: {{ lastRaceRows.length }}</li>
-            <li>Boat found in overall: {{ !!myOverall }}</li>
-            <li>Classes loaded: {{ classes.length }}</li>
-            <li>Races loaded: {{ races.length }}</li>
-          </ul>
-        </div>
-        <div v-if="allBoatNames.length">
-          <strong>All Boat Names Found:</strong>
-          <div class="boat-list">
-            <div v-for="name in allBoatNames" :key="name" 
-                 :class="{highlight: isMe(name)}" class="boat-name">
-              "{{ name }}" <span v-if="isMe(name)">← YOU</span>
-            </div>
-          </div>
-        </div>
+    <!-- Boat Detection Status -->
+    <div v-if="selectedRegattaId && !detectedClass && !loading.any" class="card warning">
+      <h3>🔍 Searching for "{{ boatName }}"...</h3>
+      <p>Automatically scanning all classes to find your boat...</p>
+      <button class="btn" @click="findBoatAndLoad">Start Search</button>
+    </div>
+
+    <div v-if="boatSearchResults.length > 0" class="card success">
+      <h3>✅ Boat Found!</h3>
+      <div v-for="result in boatSearchResults" :key="result.classId" class="search-result">
+        <strong>"{{ result.boatData.name }}"</strong> found in class <strong>{{ result.classId }}</strong>
+        <span class="position">Position {{ result.boatData.position }} of {{ result.totalBoats }}</span>
+        <button class="btn small" @click="selectClass(result.classId)">View Results</button>
       </div>
     </div>
 
-    <div v-if="selectedRegattaId">
-      <!-- OVERALL STANDINGS (top) -->
+    <div v-if="selectedRegattaId && detectedClass">
+      <!-- My Boat Summary -->
+      <div v-if="myOverall" class="card highlight">
+        <h3 class="card-title">🏆 {{ boatName }} - {{ detectedClass }}</h3>
+        <div class="stats">
+          <div class="stat">
+            <div class="k">Overall Position</div>
+            <div class="v">#{{ myOverall.position }}</div>
+          </div>
+          <div class="stat">
+            <div class="k">Country</div>
+            <div class="v">{{ myOverall.country }}</div>
+          </div>
+          <div class="stat">
+            <div class="k">Sail Number</div>
+            <div class="v">{{ myOverall.sailNo }}</div>
+          </div>
+          <div class="stat">
+            <div class="k">Points</div>
+            <div class="v">{{ myOverall.points }}</div>
+          </div>
+          <div class="stat">
+            <div class="k">Total</div>
+            <div class="v">{{ myOverall.total }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Overall Standings -->
       <div class="card">
-        <h3 class="card-title">Overall standings — {{ selectedClassId }}</h3>
+        <h3 class="card-title">Overall Standings — {{ detectedClass }}</h3>
         <div v-if="loading.overall" class="empty">Loading overall standings...</div>
-        <div v-else-if="!overallRows.length" class="empty">
-          No overall standings data found.
-          <div v-if="showDebug" class="debug-help">
-            <p><strong>Debug help:</strong></p>
-            <p>Check server logs for parsing details</p>
-            <p>Test URL: <a :href="getOverallUrl()" target="_blank">{{ getOverallUrl() }}</a></p>
-          </div>
-        </div>
-        <div v-else>
-          <div v-if="myOverall" class="stats">
-            <div class="stat"><div class="k">My Position</div><div class="v">{{ myOverall.position }}</div></div>
-            <div class="stat"><div class="k">Points</div><div class="v">{{ myOverall.points }}</div></div>
-            <div class="stat"><div class="k">Total</div><div class="v">{{ myOverall.total }}</div></div>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>#</th><th>Boat</th><th>Sail</th><th>Skipper</th><th>Points</th><th>Total</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in overallRows" :key="row._key" :class="{me: isMe(row.name)}">
-                  <td>{{ row.position }}</td>
-                  <td><strong>{{ row.name }}</strong></td>
-                  <td>{{ row.sailNo }}</td>
-                  <td>{{ row.skipper }}</td>
-                  <td>{{ row.points }}</td>
-                  <td>{{ row.total }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div v-else-if="!overallRows.length" class="empty">No overall standings data found.</div>
+        <div v-else class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Boat</th><th>Country</th><th>Sail No</th><th>Points</th><th>Total</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in overallRows" :key="row._key" :class="{me: isMe(row.name)}">
+                <td>{{ row.position }}</td>
+                <td><strong>{{ row.name }}</strong></td>
+                <td>{{ row.country }}</td>
+                <td>{{ row.sailNo }}</td>
+                <td>{{ row.points }}</td>
+                <td>{{ row.total }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <!-- LAST RACE -->
-      <div class="card">
-        <h3 class="card-title">Last race — {{ lastRaceTitle }}</h3>
-        <div v-if="loading.last" class="empty">Loading last race...</div>
-        <div v-else-if="!lastRaceRows.length" class="empty">
-          No last race data found.
-          <div v-if="showDebug" class="debug-help">
-            <p>Test URL: <a :href="getLastRaceUrl()" target="_blank">{{ getLastRaceUrl() }}</a></p>
+      <!-- Last Race -->
+      <div v-if="lastRaceRows.length > 0" class="card">
+        <h3 class="card-title">Last Race — {{ lastRaceTitle }}</h3>
+        <div v-if="myLastRace" class="stats">
+          <div class="stat">
+            <div class="k">Position</div>
+            <div class="v">#{{ myLastRace.position }}</div>
+          </div>
+          <div class="stat">
+            <div class="k">Finish Time</div>
+            <div class="v">{{ myLastRace.finishTime }}</div>
+          </div>
+          <div class="stat">
+            <div class="k">Corrected Time</div>
+            <div class="v">{{ myLastRace.correctedTime }}</div>
           </div>
         </div>
-        <div v-else>
-          <div v-if="myLastRace" class="stats">
-            <div class="stat"><div class="k">Position</div><div class="v">{{ myLastRace.position }}</div></div>
-            <div class="stat"><div class="k">Finish</div><div class="v">{{ myLastRace.finishTime }}</div></div>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>#</th><th>Boat</th><th>Finish</th><th>Elapsed</th><th>Corrected</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in lastRaceRows" :key="row._key" :class="{me: isMe(row.name)}">
-                  <td>{{ row.position }}</td>
-                  <td><strong>{{ row.name }}</strong></td>
-                  <td>{{ row.finishTime }}</td>
-                  <td>{{ row.elapsed }}</td>
-                  <td>{{ row.correctedTime }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Boat</th><th>Finish</th><th>Elapsed</th><th>Corrected</th><th>Δ to 1st</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in lastRaceRows" :key="row._key" :class="{me: isMe(row.name)}">
+                <td>{{ row.position }}</td>
+                <td><strong>{{ row.name }}</strong></td>
+                <td>{{ row.finishTime }}</td>
+                <td>{{ row.elapsed }}</td>
+                <td>{{ row.correctedTime }}</td>
+                <td>{{ row.deltaToFirst }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <!-- PREVIOUS RACES -->
-      <div v-if="races.length > 1" class="card">
-        <h3 class="card-title">All races ({{ races.length }} total)</h3>
-        <div class="race-list">
-          <div v-for="race in races" :key="race.id" class="race-item">
-            <strong>{{ race.label }}</strong>
-            <button @click="loadRaceData(race.id)" :disabled="loading.race" class="btn small">
-              {{ loading.race === race.id ? 'Loading...' : 'Load' }}
-            </button>
-          </div>
-        </div>
-        
-        <div v-if="selectedRaceData.length > 0" class="race-results">
-          <h4>Race {{ selectedRaceId }} Results</h4>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in selectedRaceData" :key="row._key" :class="{me: isMe(row.name)}">
-                  <td>{{ row.position }}</td>
-                  <td><strong>{{ row.name }}</strong></td>
-                  <td>{{ row.finishTime }}</td>
-                  <td>{{ row.correctedTime }}</td>
-                </tr>
-              </tbody>
-            </table>
+      <!-- All Races -->
+      <div v-if="races.length > 0" class="card">
+        <h3 class="card-title">All Races ({{ races.length }} total)</h3>
+        <div class="race-grid">
+          <div v-for="race in races" :key="race.id" class="race-card">
+            <div class="race-header">
+              <strong>{{ race.label }}</strong>
+              <button @click="loadRaceData(race.id)" 
+                      :disabled="loading.race === race.id" 
+                      class="btn small">
+                {{ loading.race === race.id ? 'Loading...' : 'Load' }}
+              </button>
+            </div>
+            
+            <div v-if="raceData[race.id]" class="race-results">
+              <div v-if="getRaceResult(race.id)" class="my-result">
+                <strong>Your Result:</strong> 
+                Position {{ getRaceResult(race.id).position }}
+              </div>
+              <div class="table-wrap small">
+                <table>
+                  <thead>
+                    <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in raceData[race.id].slice(0, 8)" :key="row._key" :class="{me: isMe(row.name)}">
+                      <td>{{ row.position }}</td>
+                      <td>{{ row.name }}</td>
+                      <td>{{ row.finishTime }}</td>
+                      <td>{{ row.correctedTime }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -179,19 +182,12 @@ import { supabase } from '../lib/supabase'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
-/* Debug state */
-const showDebug = ref(false)
-
-function toggleDebug() {
-  showDebug.value = !showDebug.value
-}
-
-/* Enhanced boat name matching */
+/* Enhanced boat matching */
 const boatName = ref('')
 
 function cleanNameForMatching(name) {
   return String(name || '')
-    .replace(/[^a-zA-Z0-9]/g, '')  // Remove all non-alphanumeric chars
+    .replace(/[^a-zA-Z0-9]/g, '')
     .toUpperCase()
 }
 
@@ -216,15 +212,7 @@ async function loadBoatFromUser(){
   console.log('[USER] Boat name:', boatName.value)
 }
 
-/* Track all boat names found for debugging */
-const allBoatNames = computed(() => {
-  const names = new Set()
-  overallRows.value.forEach(r => r.name && names.add(r.name))
-  lastRaceRows.value.forEach(r => r.name && names.add(r.name))
-  return Array.from(names).sort()
-})
-
-/* load events from DB */
+/* Events */
 const regattas = ref([])
 const selectedRegattaId = ref('')
 const currentEvent = computed(() => regattas.value.find(r => r.id === selectedRegattaId.value) || null)
@@ -238,77 +226,103 @@ async function loadRegattas() {
     .order('starts_on', { ascending: false })
   if (!error) {
     regattas.value = data || []
-    // Default to your Maxi Worlds 2024 event if present
     const maxi = regattas.value.find(r => (r.event_id || '').toLowerCase() === 'xolfq')
     selectedRegattaId.value = maxi?.id || regattas.value[0]?.id || ''
-    console.log('[REGATTAS] Loaded:', regattas.value.length, 'Selected:', selectedRegattaId.value)
+    console.log('[REGATTAS] Loaded:', regattas.value.length)
   }
 }
 
-/* classes */
+/* Auto-detection */
+const detectedClass = ref('')
+const boatSearchResults = ref([])
+
+async function findBoatAndLoad() {
+  if (!boatName.value || !evId()) return
+  
+  boatSearchResults.value = []
+  detectedClass.value = ''
+  loading.value.search = true
+  err.value = ''
+  
+  try {
+    console.log('[FIND BOAT] Searching for:', boatName.value)
+    const json = await api(`/api/results-orc?type=findBoat&eventId=${encodeURIComponent(evId())}&boatName=${encodeURIComponent(boatName.value)}`)
+    
+    if (json.results && json.results.length > 0) {
+      boatSearchResults.value = json.results
+      // Auto-select the first found class
+      const firstResult = json.results[0]
+      detectedClass.value = firstResult.classId
+      selectedClassId.value = firstResult.classId
+      
+      console.log('[FIND BOAT] Found in class:', firstResult.classId)
+      await loadClassStructure()
+      await reloadClassData()
+    } else {
+      err.value = `Boat "${boatName.value}" not found in any class`
+      console.log('[FIND BOAT] Not found in any class')
+    }
+  } catch (e) {
+    err.value = `Search failed: ${e.message}`
+    console.error('[FIND BOAT] Error:', e.message)
+  } finally {
+    loading.value.search = false
+  }
+}
+
+function selectClass(classId) {
+  detectedClass.value = classId
+  selectedClassId.value = classId
+  reloadClassData()
+}
+
+/* Classes & Races */
 const classes = ref([])
 const selectedClassId = ref('')
+const races = ref([])
 
-async function loadClasses(){
-  classes.value = []
+async function loadClassStructure() {
   if (!evId()) return
   
   try {
-    console.log('[CLASSES] Loading for event:', evId())
-    const json = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
-    classes.value = (json.results || []).map(x => ({ id: x.id, label: x.id }))
-    // Default to M2 if present, else first
-    selectedClassId.value = classes.value.find(c => c.id === 'M2')?.id || classes.value[0]?.id || ''
-    console.log('[CLASSES] Loaded:', classes.value.length, 'Selected:', selectedClassId.value)
+    // Load all classes
+    const classJson = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
+    classes.value = (classJson.results || []).map(x => ({ id: x.id, label: x.id }))
+    
+    // Load races for detected class
+    if (detectedClass.value) {
+      const raceJson = await api(`/api/results-orc?type=racesForClass&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(detectedClass.value)}`)
+      races.value = (raceJson.results || []).map(r => ({ id: r.id, label: r.label }))
+      console.log('[RACES] Loaded for class:', detectedClass.value, 'Count:', races.value.length)
+    }
   } catch (e) {
-    console.error('[CLASSES] Error:', e.message)
-    throw e
+    console.error('[CLASS STRUCTURE] Error:', e.message)
   }
 }
 
-/* races */
-const races = ref([])
-
-async function loadRaces(){
-  races.value = []
-  if (!evId() || !selectedClassId.value) return
-  
-  try {
-    console.log('[RACES] Loading for class:', selectedClassId.value)
-    const json = await api(`/api/results-orc?type=racesForClass&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
-    races.value = (json.results || []).map(r => ({ id: r.id, label: r.label }))
-    console.log('[RACES] Loaded:', races.value.length)
-  } catch (e) {
-    console.error('[RACES] Error:', e.message)
-    throw e
-  }
-}
-
-/* last race */
-const forcedLastRaceByEvent = { xolfq: '13' }
-const lastRaceId = computed(() => forcedLastRaceByEvent[evId()] || (races.value.at(-1)?.id || ''))
-const lastRaceTitle = computed(() => lastRaceId.value ? `RACE ${lastRaceId.value}` : 'RACE —')
-
-/* datasets */
+/* Data */
 const overallRows = ref([])
 const lastRaceRows = ref([])
-const selectedRaceData = ref([])
-const selectedRaceId = ref('')
+const raceData = ref({}) // { raceId: [results] }
 
 const myOverall = computed(() => overallRows.value.find(r => isMe(r.name)))
 const myLastRace = computed(() => lastRaceRows.value.find(r => isMe(r.name)))
 
-/* loading state */
+const forcedLastRaceByEvent = { xolfq: '13' }
+const lastRaceId = computed(() => forcedLastRaceByEvent[evId()] || (races.value.at(-1)?.id || ''))
+const lastRaceTitle = computed(() => lastRaceId.value ? `RACE ${lastRaceId.value}` : 'No Race')
+
+/* Loading state */
 const loading = ref({
-  classes:false, races:false, overall:false, last:false, race:false,
-  get any(){ return this.classes||this.races||this.overall||this.last||this.race }
+  search: false, overall: false, last: false, race: null,
+  get any() { return this.search || this.overall || this.last || this.race }
 })
 
-/* error state */
+/* Error state */
 const err = ref('')
 
 /* API helper */
-async function api(path){
+async function api(path) {
   const fullUrl = `${API_BASE}${path}`
   console.log('[API]', fullUrl)
   
@@ -324,117 +338,97 @@ async function api(path){
   return json
 }
 
-/* URL helpers for debug */
-function getOverallUrl() {
-  return `https://data.orc.org/public/WEV.dll?action=series&eventid=${evId()}&classid=${selectedClassId.value}`
-}
-
-function getLastRaceUrl() {
-  return `https://data.orc.org/public/WEV.dll?action=race&eventid=${evId()}&raceid=${lastRaceId.value}`
-}
-
-/* loaders */
-async function loadOverall(){
+/* Data loaders */
+async function loadOverall() {
+  if (!selectedClassId.value) return
+  
   overallRows.value = []
   loading.value.overall = true
   
   try {
-    if (!selectedClassId.value) return
     console.log('[OVERALL] Loading for class:', selectedClassId.value)
     const json = await api(`/api/results-orc?type=overall&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
-    overallRows.value = (json.results || []).map((r,i)=>({ ...r, _key:'ov'+i }))
+    overallRows.value = (json.results || []).map((r,i) => ({ ...r, _key:'ov'+i }))
     console.log('[OVERALL] Loaded:', overallRows.value.length, 'boats')
     
-    // Check for our boat
     const myBoat = overallRows.value.find(r => isMe(r.name))
     if (myBoat) {
       console.log('[OVERALL] ✅ Found boat:', myBoat.name, 'at position', myBoat.position)
     } else {
-      console.log('[OVERALL] ❌ Boat not found. Available:', overallRows.value.map(r => r.name).join(', '))
+      console.log('[OVERALL] ❌ Boat not found in:', overallRows.value.map(r => r.name).join(', '))
     }
-  } catch(e){ 
+  } catch(e) { 
     err.value = `Overall: ${e.message}`
-    console.error('[OVERALL] Error:', e.message)
   } finally { 
     loading.value.overall = false 
   }
 }
 
-async function loadLastRace(){
+async function loadLastRace() {
+  if (!lastRaceId.value || !selectedClassId.value) return
+  
   lastRaceRows.value = []
   loading.value.last = true
   
   try {
-    if (!lastRaceId.value) return
     console.log('[LAST RACE] Loading race:', lastRaceId.value)
     const json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}&classId=${encodeURIComponent(selectedClassId.value)}`)
-    lastRaceRows.value = (json.results || []).map((r,i)=>({ ...r, _key:'last-'+i }))
+    lastRaceRows.value = (json.results || []).map((r,i) => ({ ...r, _key:'last-'+i }))
     console.log('[LAST RACE] Loaded:', lastRaceRows.value.length, 'boats')
-    
-    const myBoat = lastRaceRows.value.find(r => isMe(r.name))
-    if (myBoat) {
-      console.log('[LAST RACE] ✅ Found boat:', myBoat.name, 'at position', myBoat.position)
-    } else {
-      console.log('[LAST RACE] ❌ Boat not found')
-    }
-  } catch(e){ 
+  } catch(e) { 
     err.value = `Last race: ${e.message}`
-    console.error('[LAST RACE] Error:', e.message)
   } finally { 
     loading.value.last = false 
   }
 }
 
 async function loadRaceData(raceId) {
-  selectedRaceData.value = []
-  selectedRaceId.value = raceId
+  if (!selectedClassId.value) return
+  
   loading.value.race = raceId
   
   try {
     console.log('[RACE] Loading race:', raceId)
     const json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}&raceId=${encodeURIComponent(raceId)}`)
-    selectedRaceData.value = (json.results || []).map((r,i)=>({ ...r, _key:`race-${raceId}-${i}` }))
-    console.log('[RACE] Loaded:', selectedRaceData.value.length, 'boats')
-  } catch(e){ 
+    const results = (json.results || []).map((r,i) => ({ ...r, _key:`race-${raceId}-${i}` }))
+    raceData.value[raceId] = results
+    console.log('[RACE] Loaded:', results.length, 'boats for race', raceId)
+  } catch(e) { 
     console.error('[RACE] Error:', e.message)
   } finally { 
-    loading.value.race = false 
+    loading.value.race = null
   }
 }
 
-/* main reload */
-async function reloadAll(){
-  err.value = ''
-  console.log('[RELOAD] Starting...')
+function getRaceResult(raceId) {
+  const results = raceData.value[raceId] || []
+  return results.find(r => isMe(r.name))
+}
+
+async function reloadClassData() {
+  if (!selectedClassId.value) return
   
-  try {
-    await loadClasses()
-    if (!selectedClassId.value) return
-    
-    await loadRaces()
-    await loadOverall()
-    
-    if (lastRaceId.value) {
-      await loadLastRace()
-    }
-    
-    console.log('[RELOAD] Complete')
-  } catch (e) {
-    err.value = e.message
-    console.error('[RELOAD] Failed:', e.message)
-  }
+  console.log('[RELOAD] Loading data for class:', selectedClassId.value)
+  await Promise.all([
+    loadOverall(),
+    loadLastRace()
+  ])
 }
 
-/* watchers */
-watch(selectedClassId, () => selectedClassId.value && reloadAll())
-
-/* lifecycle */
+/* Main workflow */
 onMounted(async () => {
   console.log('[MOUNT] Starting...')
   await loadBoatFromUser()
   await loadRegattas()
-  if (selectedRegattaId.value) {
-    await reloadAll()
+  
+  if (selectedRegattaId.value && boatName.value) {
+    await findBoatAndLoad()
+  }
+})
+
+watch(selectedRegattaId, () => {
+  if (selectedRegattaId.value && boatName.value) {
+    findBoatAndLoad()
   }
 })
 </script>
@@ -472,49 +466,36 @@ onMounted(async () => {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
 }
 
-.debug-panel {
+.card.warning {
   background: rgba(255, 196, 0, 0.1);
   border: 1px solid rgba(255, 196, 0, 0.3);
 }
 
-.debug-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1rem;
-  font-size: 0.9rem;
+.card.success {
+  background: rgba(0, 255, 0, 0.1);
+  border: 1px solid rgba(0, 255, 0, 0.3);
 }
 
-.debug-help {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: rgba(255, 196, 0, 0.1);
-  border-radius: 8px;
-  font-size: 0.9rem;
+.card.highlight {
+  background: rgba(17, 232, 163, 0.1);
+  border: 1px solid rgba(17, 232, 163, 0.3);
 }
 
-.debug-help a {
-  color: #ffc400;
-  word-break: break-all;
+.search-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.boat-list {
-  max-height: 150px;
-  overflow-y: auto;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 8px;
-  border-radius: 4px;
+.search-result:last-child {
+  border-bottom: none;
 }
 
-.boat-name {
-  padding: 2px 4px;
-  font-family: monospace;
-  font-size: 0.8rem;
-}
-
-.boat-name.highlight {
-  background: rgba(17, 232, 163, 0.3);
-  border-radius: 4px;
-  font-weight: bold;
+.position {
+  color: #11e8a3;
+  font-weight: 600;
 }
 
 .btn {
@@ -524,6 +505,8 @@ onMounted(async () => {
   cursor: pointer;
   font-weight: 600;
   transition: all 0.2s;
+  background: linear-gradient(135deg, #11e8a3, #42f5c8);
+  color: #0b2239;
 }
 
 .btn.small {
@@ -535,16 +518,6 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.1);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.btn.debug {
-  background: rgba(255, 196, 0, 0.2);
-  color: #ffc400;
-  border: 1px solid rgba(255, 196, 0, 0.3);
-}
-
-.btn.debug.active {
-  background: rgba(255, 196, 0, 0.3);
 }
 
 .btn:hover:not(:disabled) {
@@ -603,6 +576,11 @@ select, input {
   background: rgba(0, 0, 0, 0.2);
 }
 
+.table-wrap.small {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -627,20 +605,32 @@ tr.me strong {
   color: #11e8a3;
 }
 
-.race-list {
+.race-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   gap: 1rem;
-  margin-bottom: 1rem;
 }
 
-.race-item {
+.race-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.race-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
+  margin-bottom: 1rem;
+}
+
+.my-result {
+  background: rgba(17, 232, 163, 0.2);
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-weight: 600;
 }
 
 .error {
