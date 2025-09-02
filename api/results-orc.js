@@ -1,5 +1,5 @@
 // api/results-orc.js
-export const runtime = 'nodejs'  // force Node runtime
+export const runtime = 'nodejs'  // force Node runtime on Vercel
 
 export default async function handler(req, res) {
   // CORS
@@ -16,26 +16,20 @@ export default async function handler(req, res) {
     const raceId  = q.raceId  != null ? String(q.raceId)  : ''
 
     if (type === 'ping') {
-      return res.status(200).json({
-        ok: true,
-        runtime,
-        node: process.versions?.node,
-        time: new Date().toISOString(),
-      })
+      return res.status(200).json({ ok: true, runtime, node: process.versions?.node, time: new Date().toISOString() })
     }
 
     if (!eventId && type !== 'ping') {
       return res.status(400).json({ success:false, message:'Missing eventId' })
     }
 
-    // ---- DEBUG: fetch raw index, no regex parsing
     if (type === 'debug') {
       const html = await fetchText(indexUrl(eventId))
       return res.status(200).json({
         success: true,
         resultType: 'debug',
         meta: { eventId, node: process.versions?.node, runtime },
-        preview: html.slice(0, 800)   // first 800 chars
+        preview: html.slice(0, 1200)
       })
     }
 
@@ -112,6 +106,9 @@ function safeParse(fn, html) {
 }
 
 /* ---------- Utils ---------- */
+function decodeEntities(s) {
+  return String(s || '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+}
 function cleanup(s) {
   return String(s || '')
     .replace(new RegExp("<[^>]+>", "g"), " ")
@@ -134,7 +131,7 @@ function mmssDelta(a, b) {
   return `${mm}:${ss}`
 }
 
-/* ---------- Table extraction (no regex literals with flags) ---------- */
+/* ---------- Table extraction ---------- */
 function extractLargestTableRows(html) {
   const tableRe = new RegExp("<table[\\s\\S]*?<\\/table>", "gi")
   const trsRe   = new RegExp("<tr[\\s\\S]*?<\\/tr>", "gi")
@@ -165,28 +162,60 @@ function extractLargestTableRows(html) {
   return rows
 }
 
-/* ---------- Parsers (no regex literals with flags) ---------- */
-function parseClasses(html) {
+/* ---------- Parsers (robust to quotes, &amp;, param order) ---------- */
+function parseClasses(htmlRaw) {
+  const html = decodeEntities(htmlRaw)
+
   const out = []
-  const re = new RegExp("href=\"[^\"]*action=series&eventid=[^\"&]+&classid=([^\"&]+)[^\"]*\">([\\s\\S]*?)<\\/a>", "gi")
+  // 1) anchor form, double or single quotes
+  const reA = new RegExp(
+    "href=([\"'])[^\"']*action=series[^\"']*?(?:eventid=[^\"'&>]+&[^\"'>]*classid=([^\"'&>]+)|classid=([^\"'&>]+)[^\"'>]*&[^\"'>]*eventid=[^\"'&>]+)[^\"']*\\1[^>]*>([\\s\\S]*?)<\\/a>",
+    "gi"
+  )
   let m
-  while ((m = re.exec(html)) !== null) {
-    const id = decodeURIComponent(m[1]).trim()
-    const label = cleanup(m[2])
-    if (id && !out.some(x => x.id === id)) out.push({ id, label })
+  while ((m = reA.exec(html)) !== null) {
+    const id = (m[2] || m[3] || '').trim()
+    const label = cleanup(m[4])
+    if (id && !out.some(x => x.id === id)) out.push({ id, label: label || id })
+  }
+
+  // 2) URL-only fallback (no reliance on <a> inner text)
+  if (!out.length) {
+    const reU = new RegExp("action=series[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*classid=([^\\s\"'>&]+)", "gi")
+    while ((m = reU.exec(html)) !== null) {
+      const id = (m[1] || '').trim()
+      if (id && !out.some(x => x.id === id)) out.push({ id, label: id })
+    }
   }
   return out
 }
 
-function parseRaces(html) {
+function parseRaces(htmlRaw) {
+  const html = decodeEntities(htmlRaw)
+
   const out = []
-  const re = new RegExp("href=\"[^\"]*action=race&eventid=[^\"&]+&raceid=([^\"&]+)[^\"]*\">([\\s\\S]*?)<\\/a>", "gi")
+  // 1) anchor form
+  const reA = new RegExp(
+    "href=([\"'])[^\"']*action=race[^\"']*?(?:eventid=[^\"'&>]+&[^\"'>]*raceid=([^\"'&>]+)|raceid=([^\"'&>]+)[^\"'>]*&[^\"'>]*eventid=[^\"'&>]+)[^\"']*\\1[^>]*>([\\s\\S]*?)<\\/a>",
+    "gi"
+  )
   let m
-  while ((m = re.exec(html)) !== null) {
-    const id = decodeURIComponent(m[1]).trim()
-    const label = cleanup(m[2])
-    if (id && !out.some(x => x.id === id)) out.push({ id, label })
+  while ((m = reA.exec(html)) !== null) {
+    const id = (m[2] || m[3] || '').trim()
+    const label = cleanup(m[4])
+    if (id && !out.some(x => x.id === id)) out.push({ id, label: label || `Race ${id}` })
   }
+
+  // 2) URL-only fallback
+  if (!out.length) {
+    const reU = new RegExp("action=race[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*raceid=([^\\s\"'>&]+)", "gi")
+    while ((m = reU.exec(html)) !== null) {
+      const id = (m[1] || '').trim()
+      if (id && !out.some(x => x.id === id)) out.push({ id, label: `Race ${id}` })
+    }
+  }
+
+  // numeric-ish sort
   return out.sort((a,b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true, sensitivity:'base' }))
 }
 
@@ -237,7 +266,6 @@ function normalizeTime(t) {
   const s = cleanup(t)
   if (!s) return ''
   if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(s)) return s.toUpperCase()
-  // accept H:MM:SS or MM:SS as-is
   const m = s.match(new RegExp("^(\\d{1,2}:)?\\d{1,2}:\\d{2}$"))
   return m ? s : s
 }
