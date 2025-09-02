@@ -1,7 +1,5 @@
-
 // api/results-orc.js
-// Ensure Vercel uses Node runtime (not Edge)
-export const runtime = 'nodejs'
+export const runtime = 'nodejs'  // force Node runtime
 
 export default async function handler(req, res) {
   // CORS
@@ -17,7 +15,29 @@ export default async function handler(req, res) {
     const classId = q.classId != null ? String(q.classId) : ''
     const raceId  = q.raceId  != null ? String(q.raceId)  : ''
 
-    if (!eventId) return res.status(400).json({ success:false, message:'Missing eventId' })
+    if (type === 'ping') {
+      return res.status(200).json({
+        ok: true,
+        runtime,
+        node: process.versions?.node,
+        time: new Date().toISOString(),
+      })
+    }
+
+    if (!eventId && type !== 'ping') {
+      return res.status(400).json({ success:false, message:'Missing eventId' })
+    }
+
+    // ---- DEBUG: fetch raw index, no regex parsing
+    if (type === 'debug') {
+      const html = await fetchText(indexUrl(eventId))
+      return res.status(200).json({
+        success: true,
+        resultType: 'debug',
+        meta: { eventId, node: process.versions?.node, runtime },
+        preview: html.slice(0, 800)   // first 800 chars
+      })
+    }
 
     if (type === 'classes') {
       const html = await fetchText(indexUrl(eventId))
@@ -39,6 +59,13 @@ export default async function handler(req, res) {
       return ok(res, 'overall', results, { eventId, classId: cls })
     }
 
+    if (type === 'race') {
+      if (!raceId) return res.status(400).json({ success:false, message:'Missing raceId' })
+      const html = await fetchText(raceUrl(eventId, raceId))
+      const rows = safeParse(parseRace, html)
+      return ok(res, 'race', rows, { eventId, raceId })
+    }
+
     if (type === 'lastRace') {
       const htmlIdx = await fetchText(indexUrl(eventId))
       const races = safeParse(parseRaces, htmlIdx)
@@ -49,17 +76,10 @@ export default async function handler(req, res) {
       return ok(res, 'race', rows, { eventId, raceId: last.id, raceLabel: last.label })
     }
 
-    if (type === 'race') {
-      if (!raceId) return res.status(400).json({ success:false, message:'Missing raceId' })
-      const html = await fetchText(raceUrl(eventId, raceId))
-      const rows = safeParse(parseRace, html)
-      return ok(res, 'race', rows, { eventId, raceId })
-    }
-
     return res.status(400).json({ success:false, message:'Unknown type' })
   } catch (e) {
     console.error('ORC handler fatal:', e)
-    return res.status(500).json({ success:false, message: String(e?.message || e) })
+    return res.status(500).json({ success:false, message: String(e?.message || e), stack: e?.stack })
   }
 }
 
@@ -80,7 +100,7 @@ async function fetchText(url) {
   return r.text()
 }
 function ok(res, resultType, results, meta = {}) {
-  return res.status(200).json({ success:true, resultType, results, meta, lastUpdated: new Date().toISOString() })
+  return res.status(200).json({ success:true, resultType, results, meta, lastUpdated:new Date().toISOString() })
 }
 
 /* ---------- Safety wrapper ---------- */
@@ -114,11 +134,12 @@ function mmssDelta(a, b) {
   return `${mm}:${ss}`
 }
 
-/* ---------- Table extraction (regex via RegExp(), no inline flags) ---------- */
+/* ---------- Table extraction (no regex literals with flags) ---------- */
 function extractLargestTableRows(html) {
   const tableRe = new RegExp("<table[\\s\\S]*?<\\/table>", "gi")
   const trsRe   = new RegExp("<tr[\\s\\S]*?<\\/tr>", "gi")
   const cellRe  = new RegExp("<t[dh][^>]*>([\\s\\S]*?)<\\/t[dh]>", "gi")
+  const trTagRe = new RegExp("<tr", "gi")
 
   const tables = []
   let m
@@ -127,7 +148,9 @@ function extractLargestTableRows(html) {
 
   let best = tables[0]
   for (const t of tables) {
-    if ((t.match(/<tr/gi) || []).length > (best.match(/<tr/gi) || []).length) best = t
+    const cntT = (t.match(trTagRe) || []).length
+    const cntB = (best.match(trTagRe) || []).length
+    if (cntT > cntB) best = t
   }
 
   const rows = []
@@ -142,9 +165,8 @@ function extractLargestTableRows(html) {
   return rows
 }
 
-/* ---------- Parsers (regex via RegExp()) ---------- */
+/* ---------- Parsers (no regex literals with flags) ---------- */
 function parseClasses(html) {
-  // anchors like: action=series&...&classid=SY
   const out = []
   const re = new RegExp("href=\"[^\"]*action=series&eventid=[^\"&]+&classid=([^\"&]+)[^\"]*\">([\\s\\S]*?)<\\/a>", "gi")
   let m
@@ -157,7 +179,6 @@ function parseClasses(html) {
 }
 
 function parseRaces(html) {
-  // anchors like: action=race&...&raceid=7
   const out = []
   const re = new RegExp("href=\"[^\"]*action=race&eventid=[^\"&]+&raceid=([^\"&]+)[^\"]*\">([\\s\\S]*?)<\\/a>", "gi")
   let m
@@ -166,7 +187,6 @@ function parseRaces(html) {
     const label = cleanup(m[2])
     if (id && !out.some(x => x.id === id)) out.push({ id, label })
   }
-  // numeric-ish sort
   return out.sort((a,b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true, sensitivity:'base' }))
 }
 
@@ -217,8 +237,8 @@ function normalizeTime(t) {
   const s = cleanup(t)
   if (!s) return ''
   if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(s)) return s.toUpperCase()
-  // Allow H:MM:SS or MM:SS; keep as-is if it looks time-ish
-  const m = s.match(/^(\d{1,2}:)?\d{1,2}:\d{2}$/)
+  // accept H:MM:SS or MM:SS as-is
+  const m = s.match(new RegExp("^(\\d{1,2}:)?\\d{1,2}:\\d{2}$"))
   return m ? s : s
 }
 
