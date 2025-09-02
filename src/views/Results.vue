@@ -136,30 +136,10 @@
                   <div class="stat"><div class="k">Δ in front</div><div class="v">{{ raceSummaries[race.id]?.deltaAhead || '–' }}</div></div>
                   <div class="stat"><div class="k">Δ behind</div><div class="v">{{ raceSummaries[race.id]?.deltaBehind || '–' }}</div></div>
                 </div>
-                <p class="hint">Click card to flip</p>
-              </template>
-              <template #back>
-                <h3 class="card-title">{{ race.label }} — full table</h3>
-                <div class="table-wrap">
-                  <table>
-                    <thead>
-                      <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th><th>Δ to first</th></tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="row in raceTables[race.id]" :key="row._key" :class="{me: isMe(row.name)}">
-                        <td>{{ row.position }}</td>
-                        <td>{{ row.name }}</td>
-                        <td>{{ row.finishTime }}</td>
-                        <td>{{ row.correctedTime }}</td>
-                        <td>{{ row.deltaToFirst }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </template>
-            </FlipCard>
-          </div>
-        </div>
+              </div>
+            </div>
+          </template>
+        </FlipCard>
       </div>
     </div>
   </div>
