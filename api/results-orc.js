@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const classId = q.classId != null ? String(q.classId) : ''
     const raceId = q.raceId != null ? String(q.raceId) : ''
 
-    console.log(`API Call: type=${type}, eventId=${eventId}, classId=${classId}, raceId=${raceId}`)
+    console.log(`API called: type=${type}, eventId=${eventId}, classId=${classId}, raceId=${raceId}`)
 
     if (type === 'ping') {
       return res.status(200).json({ ok: true, runtime, node: process.versions?.node, time: new Date().toISOString() })
@@ -28,69 +28,84 @@ export default async function handler(req, res) {
     // Debug endpoint
     if (type === 'debug') {
       const html = await fetchText(indexUrl(eventId))
-      return res.status(200).json({ success: true, resultType: 'debug', meta: { eventId, runtime }, preview: html.slice(0, 1400) })
+      return res.status(200).json({ 
+        success: true, 
+        resultType: 'debug', 
+        meta: { eventId, runtime }, 
+        preview: html.slice(0, 1400) 
+      })
     }
 
-    // Classes endpoint
+    // Classes
     if (type === 'classes') {
       const html = await fetchText(indexUrl(eventId))
       const classes = safeParse(parseClasses, html)
+      console.log(`Found ${classes.length} classes:`, classes.map(c => c.id))
       return ok(res, 'classes', classes, { eventId })
     }
 
-    // Races for class endpoint
+    // Races for a specific class
     if (type === 'racesForClass') {
       if (!classId) return res.status(400).json({ success: false, message: 'Missing classId' })
       const html = await fetchText(indexUrl(eventId))
       const races = safeParse(h => parseRacesForClass(h, classId), html)
+      console.log(`Found ${races.length} races for class ${classId}:`, races.map(r => r.id))
       return ok(res, 'races', races, { eventId, classId })
     }
 
-    // Legacy races endpoint
+    // All races (legacy)
     if (type === 'races') {
       const html = await fetchText(indexUrl(eventId))
       const races = safeParse(parseRacesAnyClass, html)
       return ok(res, 'races', races, { eventId })
     }
 
-    // Overall standings
+    // Overall series standings
     if (type === 'overall') {
       const cls = classId || (await autoFirstClass(eventId))
       if (!cls) return ok(res, 'overall', [], { eventId, classId: null })
+      
+      console.log(`Loading overall for class: ${cls}`)
       const html = await fetchText(seriesUrl(eventId, cls))
       const rows = safeParse(parseOverallByHeaders, html)
+      console.log(`Parsed ${rows.length} overall results`)
       return ok(res, 'overall', rows, { eventId, classId: cls })
     }
 
-    // Race results for a specific class
+    // Individual race results (class-specific URL)
     if (type === 'race') {
       if (!raceId) return res.status(400).json({ success: false, message: 'Missing raceId' })
       const cls = classId || (await autoFirstClass(eventId))
       if (!cls) return ok(res, 'race', [], { eventId, classId: null, raceId })
       
-      console.log(`Fetching race ${raceId} for class ${cls}`)
+      console.log(`Loading race ${raceId} for class: ${cls}`)
       const html = await fetchText(raceUrl(eventId, cls, raceId))
       const rows = safeParse(parseRaceForClass, html)
-      console.log(`Race ${raceId}: Found ${rows.length} results`)
+      console.log(`Parsed ${rows.length} race results for race ${raceId}`)
       return ok(res, 'race', rows, { eventId, classId: cls, raceId })
     }
 
-    // Race page without class in URL (raw race page)
+    // Race page without class in URL (multi-class page)
     if (type === 'raceRaw') {
       if (!raceId) return res.status(400).json({ success: false, message: 'Missing raceId' })
       
-      console.log(`Fetching raw race ${raceId}, looking for class ${classId}`)
+      console.log(`Loading raw race ${raceId}, selecting class: ${classId}`)
       const html = await fetchText(raceUrlRaw(eventId, raceId))
       const rows = safeParse(h => parseRaceChooseClass(h, classId || ''), html)
-      console.log(`Raw race ${raceId}: Found ${rows.length} results`)
+      console.log(`Parsed ${rows.length} results from raw race page`)
       return ok(res, 'race', rows, { eventId, classId: classId || null, raceId })
     }
 
-    return res.status(400).json({ success: false, message: 'Unknown type' })
+    return res.status(400).json({ success: false, message: `Unknown type: ${type}` })
     
   } catch (e) {
-    console.error('ORC handler fatal:', e)
-    return res.status(500).json({ success: false, message: String(e?.message || e), stack: e?.stack })
+    console.error('ORC API Error:', e)
+    return res.status(500).json({ 
+      success: false, 
+      message: String(e?.message || e), 
+      stack: e?.stack,
+      params: { type: req.query?.type, eventId: req.query?.eventId }
+    })
   }
 }
 
@@ -110,20 +125,42 @@ async function fetchText(url) {
     }
   })
   if (!r.ok) throw new Error(`Fetch failed ${r.status} for ${url}`)
-  return r.text()
+  const text = await r.text()
+  console.log(`Response length: ${text.length} chars`)
+  return text
 }
 
 function ok(res, resultType, results, meta = {}) {
-  return res.status(200).json({ success: true, resultType, results, meta, lastUpdated: new Date().toISOString() })
+  return res.status(200).json({ 
+    success: true, 
+    resultType, 
+    results, 
+    meta, 
+    lastUpdated: new Date().toISOString() 
+  })
 }
 
 /* ---------- Safety wrapper ---------- */
 function safeParse(fn, html) {
   try { 
-    return fn(html) 
+    const result = fn(html)
+    console.log(`${fn.name} returned ${result.length} items`)
+    return result
   } catch (e) {
     console.error(`Parse error in ${fn.name}:`, e)
     return []
+  }
+}
+
+/* ---------- Auto-detect first class ---------- */
+async function autoFirstClass(eventId) {
+  try {
+    const html = await fetchText(indexUrl(eventId))
+    const classes = parseClasses(html)
+    return classes[0]?.id || ''
+  } catch (e) {
+    console.error('Failed to auto-detect first class:', e)
+    return ''
   }
 }
 
@@ -131,35 +168,28 @@ function safeParse(fn, html) {
 function decodeEntities(s) {
   return String(s || '')
     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
 }
 
 function cleanup(s) {
   return decodeEntities(String(s || ''))
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\u00A0/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\u00A0/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
 }
 
 function toSec(str) {
   if (!str) return null
   if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(str)) return null
-  
-  const cleaned = str.replace(/[^\d:]/g, '').trim()
-  if (!cleaned) return null
-  
-  const p = cleaned.split(':').map(Number).filter(n => !isNaN(n))
-  return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : 
-         p.length === 2 ? p[0] * 60 + p[1] : 
-         p.length === 1 ? p[0] : null
+  const p = str.split(':').map(Number)
+  return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]
 }
 
 function mmssDelta(a, b) {
   const s1 = toSec(a), s2 = toSec(b)
   if (s1 == null || s2 == null) return '–'
-  const d = Math.abs(s2 - s1)
+  const d = Math.max(0, s2 - s1)
   const mm = String(Math.floor(d / 60)).padStart(2, '0')
   const ss = String(d % 60).padStart(2, '0')
   return `${mm}:${ss}`
@@ -169,7 +199,7 @@ function escapeRegex(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') 
 }
 
-/* ---------- Table extraction ---------- */
+/* ---------- Generic table extraction ---------- */
 function allTables(html) {
   const tableRe = /<table[\s\S]*?<\/table>/gi
   const out = []
@@ -177,6 +207,7 @@ function allTables(html) {
   while ((m = tableRe.exec(html)) !== null) {
     out.push({ html: m[0], index: m.index })
   }
+  console.log(`Found ${out.length} tables in HTML`)
   return out
 }
 
@@ -190,7 +221,6 @@ function tableRows(tableHtml) {
     const rowHtml = rm[0]
     const cells = []
     let cm
-    cellRe.lastIndex = 0 // Reset regex
     while ((cm = cellRe.exec(rowHtml)) !== null) {
       cells.push(cleanup(cm[1]))
     }
@@ -208,33 +238,15 @@ function headerIndex(headers, pattern) {
 }
 
 function grab(arr, idx, fallbackIdx) {
-  if (idx >= 0 && idx < arr.length && arr[idx]) {
-    return arr[idx].trim()
-  }
-  if (fallbackIdx >= 0 && fallbackIdx < arr.length && arr[fallbackIdx]) {
-    return arr[fallbackIdx].trim()
-  }
-  return ''
+  return (idx >= 0 ? arr[idx] : (arr[fallbackIdx] || '')) || ''
 }
 
-/* ---------- Auto class detection ---------- */
-async function autoFirstClass(eventId) {
-  try {
-    const html = await fetchText(indexUrl(eventId))
-    const classes = parseClasses(html)
-    return classes[0]?.id || ''
-  } catch (e) {
-    console.error('autoFirstClass failed:', e)
-    return ''
-  }
-}
-
-/* ---------- Class & Race Link Parsing ---------- */
+/* ---------- Parsing: classes & races ---------- */
 function parseClasses(htmlRaw) {
   const html = decodeEntities(htmlRaw)
   const out = []
   
-  // Look for series links with classid parameter
+  // Look for links with action=series and classid parameter
   const reA = new RegExp(
     "href=([\"'])[^\"']*action=series[^\"']*?(?:eventid=[^\"'&>]+&[^\"'>]*classid=([^\"'&>]+)|classid=([^\"'&>]+)[^\"'>]*&[^\"'>]*eventid=[^\"'&>]+)[^\"']*\\1[^>]*>([\\s\\S]*?)<\\/a>",
     "gi"
@@ -277,27 +289,33 @@ function parseRacesAnyClass(htmlRaw) {
 
 function parseRacesForClass(htmlRaw, wantClass) {
   const html = decodeEntities(htmlRaw)
+  console.log(`Looking for races for class: ${wantClass}`)
   
-  // Find class section
+  // Find the segment for this class
   const anchorRe = new RegExp(`action=series[^"'>]*classid=${escapeRegex(wantClass)}`, 'i')
   const start = html.search(anchorRe)
-  if (start < 0) return []
+  if (start < 0) {
+    console.log(`No class section found for ${wantClass}`)
+    return []
+  }
   
-  // Find end of class section
+  // Find end boundary: next class section
   const nextRe = /action=series[^"'>]*classid=([A-Za-z0-9]+)/gi
   nextRe.lastIndex = start + 1
   let end = html.length
   let m
   while ((m = nextRe.exec(html)) !== null) {
-    if (m.index > start) {
-      end = m.index
-      break
+    const idx = m.index
+    if (idx > start) { 
+      end = idx
+      break 
     }
   }
   
   const slice = html.slice(start, end)
+  console.log(`Class section length: ${slice.length} chars`)
   
-  // Extract race links from this class section
+  // Collect race links in this slice
   const raceRe = /action=race[^\s"'>]*?(?:\?|&|&amp;)[^"'>]*raceid=([^\s"'>&]+)/gi
   const out = []
   while ((m = raceRe.exec(slice)) !== null) {
@@ -306,15 +324,17 @@ function parseRacesForClass(htmlRaw, wantClass) {
       out.push({ id, label: `RACE ${id}` })
     }
   }
+  
+  console.log(`Found ${out.length} races for class ${wantClass}:`, out.map(r => r.id))
   return out.sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' }))
 }
 
-/* ---------- Overall Results Parsing ---------- */
+/* ---------- Parsing: overall (header-aware) ---------- */
 function parseOverallByHeaders(htmlRaw) {
-  console.log('parseOverallByHeaders: Starting')
   const tables = allTables(htmlRaw)
+  console.log(`Parsing overall from ${tables.length} tables`)
   
-  // Find table with position and points columns
+  // Choose the table whose header includes 'Pos' and ('Points' or 'Pts' or 'Total')
   const headerTable = tables.find(t => {
     const rows = tableRows(t.html)
     if (!rows.length) return false
@@ -324,248 +344,182 @@ function parseOverallByHeaders(htmlRaw) {
     return hasPos && hasPointsOrTotal
   }) || tables[0]
 
-  if (!headerTable) return []
+  if (!headerTable) {
+    console.log('No suitable table found for overall results')
+    return []
+  }
+  
   const rows = tableRows(headerTable.html)
   if (!rows.length) return []
 
-  // Map header indices with fallbacks
+  // Compute header indices with fallbacks
   const headers = rows[0].map(x => x.trim())
+  console.log('Overall headers:', headers)
+  
   const iPos = headerIndex(headers, '^(pos|#|position)$')
   const iBoat = headerIndex(headers, '(boat|yacht|name)')
   const iSail = headerIndex(headers, '(sail|sail\\s*no|nr|no)')
   const iSkipper = headerIndex(headers, '(skipper|owner|helm|helmsman)')
+  const iClub = headerIndex(headers, '(club|team)')
   const iPoints = headerIndex(headers, '(points|pts)')
   const iTotal = headerIndex(headers, '(total|net)')
+
+  console.log('Header indices:', { iPos, iBoat, iSail, iSkipper, iClub, iPoints, iTotal })
 
   const out = []
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r]
+    // Numeric first cell guard
     const first = parseInt(cells[0], 10)
     if (isNaN(first)) continue
 
-    out.push({
+    const result = {
       position: grab(cells, iPos, 0),
       name: grab(cells, iBoat, 1),
       sailNo: grab(cells, iSail, 2),
+      club: grab(cells, iClub, 3),
       skipper: grab(cells, iSkipper, 4),
       points: grab(cells, iPoints, 5),
       total: grab(cells, iTotal, 6) || grab(cells, iPoints, 5)
-    })
+    }
+    
+    if (result.name) {
+      out.push(result)
+    }
   }
   
-  console.log(`parseOverallByHeaders: Returning ${out.length} results`)
+  console.log(`Parsed ${out.length} overall results`)
   return out
 }
 
-/* ---------- Race Results Parsing ---------- */
+/* ---------- Parsing: race (choose class table inside race page) ---------- */
 function parseRaceForClass(htmlRaw) {
-  console.log('parseRaceForClass: Starting parse')
+  console.log('Parsing race for specific class')
   const tables = allTables(htmlRaw)
-  console.log(`Found ${tables.length} tables`)
-  
   if (!tables.length) return []
   
-  // Find the best table for race results
-  let bestTable = null
-  let bestScore = 0
-  
-  for (const table of tables) {
-    const rows = tableRows(table.html)
-    if (rows.length < 2) continue
-    
-    const headerText = rows[0].join(' ').toLowerCase()
-    let score = 0
-    
-    // Score based on expected columns
-    if (/pos|position|#/.test(headerText)) score += 3
-    if (/boat|yacht|name/.test(headerText)) score += 3
-    if (/corrected/.test(headerText)) score += 2
-    if (/finish/.test(headerText)) score += 2
-    if (/elapsed/.test(headerText)) score += 1
-    if (/sail|sail\s*no/.test(headerText)) score += 1
-    
-    // Check for actual data rows
-    const hasDataRows = rows.slice(1).some(row => 
-      row.length > 0 && (!isNaN(parseInt(row[0])) || /^(DNF|DNS|DSQ)$/i.test(row[0]))
-    )
-    if (hasDataRows) score += 2
-    
-    console.log(`Table score: ${score}, headers: ${rows[0].join(', ')}`)
-    
-    if (score > bestScore) {
-      bestScore = score
-      bestTable = table
-    }
-  }
-  
-  if (!bestTable) {
-    console.log('No suitable table found, using first table')
-    bestTable = tables[0]
-  }
-  
-  const result = toRaceRows(bestTable.html)
-  console.log(`parseRaceForClass: Returning ${result.length} rows`)
-  return result
+  // Find the first table with "Corrected"/"Finish" columns
+  const want = tables.find(t => hasResultColumns(t.html)) || tables[0]
+  return toRaceRows(want.html)
 }
 
 function parseRaceChooseClass(htmlRaw, wantClass) {
-  console.log(`parseRaceChooseClass: Looking for class "${wantClass}"`)
+  console.log(`Parsing race page, choosing class: ${wantClass}`)
+  
   const html = decodeEntities(htmlRaw)
-  
   if (!wantClass) {
-    console.log('No class specified, finding first suitable table')
+    // No class preference → first table that looks like a race table
     const tables = allTables(html)
-    const suitable = tables.find(t => hasResultColumns(t.html))
-    if (suitable) {
-      const result = toRaceRows(suitable.html)
-      console.log(`parseRaceChooseClass (no class): Returning ${result.length} rows`)
-      return result
-    }
+    const want = tables.find(t => hasResultColumns(t.html)) || tables[0]
+    return want ? toRaceRows(want.html) : []
+  }
+  
+  // Find anchor for the desired class
+  const anchorRe = new RegExp(`action=series[^"'>]*classid=${escapeRegex(wantClass)}`, 'i')
+  const pos = html.search(anchorRe)
+  if (pos < 0) {
+    console.log(`No anchor found for class ${wantClass}`)
     return []
   }
   
-  // Look for class section more broadly
-  const patterns = [
-    `classid=${escapeRegex(wantClass)}`,
-    `class=${escapeRegex(wantClass)}`,
-    `>${escapeRegex(wantClass)}<`,
-    new RegExp(`\\b${escapeRegex(wantClass)}\\b`, 'i')
-  ]
-  
-  let classPos = -1
-  for (const pattern of patterns) {
-    const regex = typeof pattern === 'string' ? new RegExp(pattern, 'i') : pattern
-    const match = html.search(regex)
-    if (match >= 0) {
-      classPos = match
-      console.log(`Found class "${wantClass}" at position ${classPos}`)
-      break
-    }
-  }
-  
-  if (classPos < 0) {
-    console.log(`Class "${wantClass}" not found, using first suitable table`)
-    // Fallback to first table with race results
-    const tables = allTables(html)
-    const suitable = tables.find(t => hasResultColumns(t.html))
-    if (suitable) {
-      const result = toRaceRows(suitable.html)
-      console.log(`parseRaceChooseClass (fallback): Returning ${result.length} rows`)
-      return result
-    }
-    return []
-  }
-  
-  // Find next table after class position
+  // From this position, find the next table
   const tableRe = /<table[\s\S]*?<\/table>/gi
-  tableRe.lastIndex = classPos
-  const match = tableRe.exec(html)
-  
-  if (!match) {
-    console.log('No table found after class position')
+  tableRe.lastIndex = pos
+  const m = tableRe.exec(html)
+  if (!m) {
+    console.log(`No table found after class ${wantClass} anchor`)
     return []
   }
   
-  const result = toRaceRows(match[0])
-  console.log(`parseRaceChooseClass: Returning ${result.length} rows for class "${wantClass}"`)
-  return result
+  const tableHtml = m[0]
+  return hasResultColumns(tableHtml) ? toRaceRows(tableHtml) : []
 }
 
 function hasResultColumns(tableHtml) {
   const rows = tableRows(tableHtml)
   if (!rows.length) return false
-  
-  const headerText = rows[0].join(' ').toLowerCase()
-  const hasPos = /pos|position|#/.test(headerText)
-  const hasBoat = /boat|yacht|name/.test(headerText)
-  const hasTime = /finish|elapsed|corrected|time/.test(headerText)
-  
-  // Check for data rows
-  const hasDataRows = rows.slice(1).some(row => 
-    row.length > 0 && (!isNaN(parseInt(row[0])) || /^(DNF|DNS|DSQ)$/i.test(row[0]))
-  )
-  
-  return hasPos && hasBoat && hasTime && hasDataRows
+  const headers = rows[0].map(x => x.toLowerCase())
+  const hasFinish = headers.some(h => /finish/.test(h))
+  const hasCorrected = headers.some(h => /corrected/.test(h))
+  const hasElapsed = headers.some(h => /elapsed/.test(h))
+  const hasPos = headers.some(h => /^(pos|#|position)$/.test(h))
+  return hasPos && (hasCorrected || hasFinish || hasElapsed)
 }
 
 function toRaceRows(tableHtml) {
   const rows = tableRows(tableHtml)
   if (!rows.length) return []
   
-  console.log(`toRaceRows: Processing ${rows.length} rows`)
-  if (rows[0]) console.log('Headers:', rows[0])
+  // Map headers
+  const headers = rows[0].map(x => x.trim())
+  console.log('Race headers:', headers)
   
-  // Map headers flexibly
-  const headers = rows[0].map(x => x.trim().toLowerCase())
-  const indices = {}
-  
-  headers.forEach((header, index) => {
-    if (/^(pos|position|#)$/.test(header)) indices.position = index
-    else if (/boat|yacht|name/.test(header)) indices.name = index
-    else if (/sail|sail\s*no|nr|no/.test(header)) indices.sailNo = index
-    else if (/owner|skipper|helm/.test(header)) indices.skipper = index
-    else if (/finish/i.test(header) && !/elapsed/.test(header)) indices.finishTime = index
-    else if (/elapsed/.test(header)) indices.elapsed = index
-    else if (/corrected/.test(header)) indices.correctedTime = index
-    else if (/penalty/.test(header)) indices.penalty = index
-    else if (/points|pts/.test(header)) indices.points = index
-  })
-  
-  console.log('Header mapping:', indices)
-  
+  const iPos = headerIndex(headers, '^(pos|#|position)$')
+  const iBoat = headerIndex(headers, '(boat|yacht|name)')
+  const iSail = headerIndex(headers, '(sail|sail\\s*no|nr|no)')
+  const iSkipper = headerIndex(headers, '(skipper|owner|helm|helmsman)')
+  const iFinish = headerIndex(headers, 'finish')
+  const iElaps = headerIndex(headers, 'elapsed')
+  const iCorr = headerIndex(headers, 'corrected')
+  const iPenalty = headerIndex(headers, 'penalty')
+  const iPoints = headerIndex(headers, '(points|pts)')
+
+  console.log('Race header indices:', { iPos, iBoat, iSail, iSkipper, iFinish, iElaps, iCorr, iPenalty, iPoints })
+
   const out = []
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r]
-    if (!cells.length) continue
-    
-    const firstCell = cells[0]
-    const isPosition = !isNaN(parseInt(firstCell))
-    const isDnf = /^(DNF|DNS|DSQ|DNC|RET)$/i.test(firstCell)
-    
-    if (!isPosition && !isDnf) {
-      console.log(`Skipping row ${r}: "${firstCell}" not a position`)
+    const first = parseInt(cells[0], 10)
+    if (isNaN(first)) {
+      // Check for DNF entries
+      if (cells.some(cell => /^(DNF|DNS|DSQ|DNC|RET)$/i.test(cell))) {
+        const dnfType = cells.find(cell => /^(DNF|DNS|DSQ|DNC|RET)$/i.test(cell)) || 'DNF'
+        out.push({
+          position: grab(cells, iPos, 0),
+          name: grab(cells, iBoat, 1),
+          sailNo: grab(cells, iSail, 2),
+          skipper: grab(cells, iSkipper, 3),
+          finishTime: dnfType,
+          elapsed: dnfType,
+          correctedTime: dnfType,
+          penalty: grab(cells, iPenalty, 7) || '0',
+          points: grab(cells, iPoints, 8) || '6.00'
+        })
+      }
       continue
     }
     
-    // Check if any cell contains DNF-type values
-    const dnfCell = cells.find(cell => /^(DNF|DNS|DSQ|DNC|RET)$/i.test(cell))
-    
     const result = {
-      position: grab(cells, indices.position, 0),
-      name: grab(cells, indices.name, 1) || 'Unknown',
-      sailNo: grab(cells, indices.sailNo, 2),
-      skipper: grab(cells, indices.skipper, 3),
-      finishTime: dnfCell || grab(cells, indices.finishTime, 4),
-      elapsed: dnfCell || grab(cells, indices.elapsed, 5),
-      correctedTime: dnfCell || grab(cells, indices.correctedTime, 6),
-      penalty: grab(cells, indices.penalty, 7) || '0',
-      points: grab(cells, indices.points, 8) || (dnfCell ? '6.00' : '0')
+      position: grab(cells, iPos, 0),
+      name: grab(cells, iBoat, 1),
+      sailNo: grab(cells, iSail, 2),
+      skipper: grab(cells, iSkipper, 3),
+      finishTime: grab(cells, iFinish, 4),
+      elapsed: grab(cells, iElaps, 5),
+      correctedTime: grab(cells, iCorr, 6),
+      penalty: grab(cells, iPenalty, 7) || '0',
+      points: grab(cells, iPoints, 8) || '0'
     }
     
-    out.push(result)
+    if (result.name) {
+      out.push(result)
+    }
   }
   
   // Calculate deltaToFirst for all results
-  if (out.length > 0) {
-    const firstResult = out[0]
-    const firstCorrectedTime = firstResult?.correctedTime
-    
-    if (firstCorrectedTime && !/^(DNF|DNS|DSQ|DNC|RET)$/i.test(firstCorrectedTime)) {
-      out.forEach(result => {
-        if (result.correctedTime && !/^(DNF|DNS|DSQ|DNC|RET)$/i.test(result.correctedTime)) {
-          result.deltaToFirst = mmssDelta(firstCorrectedTime, result.correctedTime)
+  if (out.length) {
+    const firstCorrected = out[0].correctedTime
+    if (firstCorrected && firstCorrected !== 'DNF') {
+      for (const r of out) {
+        if (r.correctedTime && r.correctedTime !== 'DNF') {
+          r.deltaToFirst = mmssDelta(firstCorrected, r.correctedTime)
         } else {
-          result.deltaToFirst = '–'
+          r.deltaToFirst = '–'
         }
-      })
-    } else {
-      // If first place is DNF, set all deltas to '–'
-      out.forEach(result => {
-        result.deltaToFirst = '–'
-      })
+      }
     }
   }
   
-  console.log(`toRaceRows: Returning ${out.length} processed results`)
+  console.log(`Parsed ${out.length} race results`)
   return out
 }
