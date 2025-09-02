@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ORC Diagnostic Test</title>
+    <style>
+        body { 
+            font-family: monospace; 
+            background: #1a1a1a; 
+            color: #00ff00; 
+            padding: 20px; 
+            line-height: 1.4;
+        }
+        .result { 
+            background: #000; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+            border: 1px solid #333;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error { 
+            color: #ff6666; 
+            background: #330000; 
+        }
+        .success { 
+            color: #66ff66; 
+            background: #003300; 
+        }
+        button {
+            background: #333;
+            color: #00ff00;
+            border: 1px solid #666;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover { background: #444; }
+        pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+        .highlight { background: #ffff0033; color: #ffff00; font-weight: bold; }
+        .table-preview { background: #222; padding: 10px; margin: 10px 0; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>🩺 ORC HTML Diagnostic</h1>
+    <p>This will show you EXACTLY what's in the ORC HTML and why parsing is failing.</p>
+    
+    <button onclick="runDiagnosis()">🔍 Run Full Diagnosis</button>
+    <button onclick="testOverall()">📊 Test Overall Parsing</button>
+    <button onclick="testRaces()">🏁 Test Race Parsing</button>
+    <button onclick="clear()">Clear</button>
+
+    <div id="output"></div>
+
+    <script>
+        const BASE_URL = window.location.origin;
+        
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `<strong>[${new Date().toLocaleTimeString()}]</strong> ${message}`;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clear() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        async function runDiagnosis() {
+            log('🩺 Running comprehensive diagnosis...', 'info');
+            
+            try {
+                // Test the special diagnose endpoint
+                const response = await fetch(`${BASE_URL}/api/results-orc?type=diagnose&eventId=xolfq&classId=M2`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('✅ Diagnosis successful!', 'success');
+                    
+                    log(`<strong>📊 Overview:</strong>
+• Event: xolfq, Class: M2
+• HTML Length: ${data.meta.htmlLength.toLocaleString()} characters
+• Tables Found: ${data.meta.tablesFound}
+• URL: ${data.url}`, 'info');
+
+                    if (data.tables && data.tables.length > 0) {
+                        log(`<strong>📋 Table Analysis:</strong>`, 'info');
+                        
+                        data.tables.forEach((table, i) => {
+                            const hasNorthstar = table.sampleRow.some(cell => 
+                                cell && cell.toLowerCase().includes('northstar')
+                            );
+                            
+                            log(`<div class="table-preview">
+<strong>Table ${i} ${hasNorthstar ? '⭐ (Contains Northstar!)' : ''}</strong>
+• Rows: ${table.rowCount}
+• Headers: [${table.headers.slice(0, 6).map(h => `"${h}"`).join(', ')}${table.headers.length > 6 ? '...' : ''}]
+• Sample: [${table.sampleRow.slice(0, 6).map(c => `"${c}"`).join(', ')}${table.sampleRow.length > 6 ? '...' : ''}]
+${hasNorthstar ? '<span class="highlight">🎯 This table contains Northstar!</span>' : ''}
+</div>`, hasNorthstar ? 'success' : 'info');
+                        });
+                        
+                        // Check if any table has Northstar
+                        const northstarTable = data.tables.find(table => 
+                            table.sampleRow.some(cell => 
+                                cell && cell.toLowerCase().includes('northstar')
+                            )
+                        );
+                        
+                        if (northstarTable) {
+                            log(`🎯 <span class="highlight">FOUND NORTHSTAR in table ${data.tables.indexOf(northstarTable)}!</span>`, 'success');
+                        } else {
+                            log(`❌ Northstar not found in any table sample rows`, 'error');
+                        }
+                    } else {
+                        log(`❌ No tables found in response`, 'error');
+                    }
+                    
+                    // Show HTML preview
+                    if (data.htmlPreview) {
+                        const hasNorthstarInHtml = data.htmlPreview.toLowerCase().includes('northstar');
+                        log(`<strong>📝 HTML Preview (first 2000 chars) ${hasNorthstarInHtml ? '⭐ Contains Northstar!' : ''}:</strong>
+<pre>${data.htmlPreview}</pre>`, hasNorthstarInHtml ? 'success' : 'info');
+                    }
+                    
+                } else {
+                    log(`❌ Diagnosis failed: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Diagnosis error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testOverall() {
+            log('📊 Testing overall standings parsing...', 'info');
+            
+            try {
+                const response = await fetch(`${BASE_URL}/api/results-orc?type=overall&eventId=xolfq&classId=M2`);
+                const data = await response.json();
+                
+                log(`Overall API result: ${data.success ? 'SUCCESS' : 'FAILED'}`, data.success ? 'success' : 'error');
+                log(`Results found: ${data.results?.length || 0} boats`);
+                
+                if (data.results && data.results.length > 0) {
+                    log(`<strong>Boats found:</strong>`);
+                    data.results.forEach((boat, i) => {
+                        const isNorthstar = boat.name && boat.name.toLowerCase().includes('northstar');
+                        log(`${i + 1}. "${boat.name}" (pos ${boat.position})${isNorthstar ? ' ⭐ NORTHSTAR!' : ''}`, isNorthstar ? 'success' : 'info');
+                    });
+                } else {
+                    log(`No boats parsed. Check server logs for detailed parsing steps.`, 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Overall test error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testRaces() {
+            log('🏁 Testing race parsing...', 'info');
+            
+            try {
+                // Test races for class
+                const racesResponse = await fetch(`${BASE_URL}/api/results-orc?type=racesForClass&eventId=xolfq&classId=M2`);
+                const racesData = await racesResponse.json();
+                
+                log(`Races API: ${racesData.success ? 'SUCCESS' : 'FAILED'}`, racesData.success ? 'success' : 'error');
+                log(`Races found: ${racesData.results?.length || 0}`);
+                
+                if (racesData.results?.length > 0) {
+                    log(`Races: ${racesData.results.map(r => r.id).join(', ')}`);
+                    
+                    // Test last race
+                    const lastRaceResponse = await fetch(`${BASE_URL}/api/results-orc?type=raceRaw&eventId=xolfq&raceId=13&classId=M2`);
+                    const lastRaceData = await lastRaceResponse.json();
+                    
+                    log(`Last race (13) API: ${lastRaceData.success ? 'SUCCESS' : 'FAILED'}`, lastRaceData.success ? 'success' : 'error');
+                    log(`Last race boats: ${lastRaceData.results?.length || 0}`);
+                    
+                } else {
+                    log(`No races found for class M2`, 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Race test error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run comprehensive diagnosis on load
+        window.addEventListener('load', () => {
+            setTimeout(runDiagnosis, 1000);
+        });
+    </script>
+</body>
+</html>
