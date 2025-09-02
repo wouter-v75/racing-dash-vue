@@ -12,8 +12,8 @@
         </select>
 
         <label v-if="classes.length">Class</label>
-        <select v-if="classes.length" v-model="selectedClassId" @change="reloadClassData">
-          <option v-for="c in classes" :key="c.id" :value="c.id">{{ classLabel(c) }}</option>
+        <select v-if="classes.length" v-model="selectedClassId">
+          <option v-for="c in classes" :key="c.id" :value="c.id">{{ c.id }}</option>
         </select>
       </div>
 
@@ -30,12 +30,13 @@
     <p v-if="err" class="error">{{ err }}</p>
 
     <div v-if="selectedRegattaId">
-      <!-- LAST RACE (on top) -->
+      <!-- LAST RACE (top) -->
       <div class="card">
         <FlipCard>
           <template #front>
             <h3 class="card-title">Last race — {{ lastRaceTitle }}</h3>
-            <div v-if="!lastRaceRows.length" class="empty">Loading…</div>
+            <div v-if="loading.last" class="empty">Loading…</div>
+            <div v-else-if="!lastRaceRows.length" class="empty">No data.</div>
             <div v-else class="stats">
               <div class="stat"><div class="k">Position</div><div class="v">{{ lastRaceSummary.position }}</div></div>
               <div class="stat"><div class="k">Finish</div><div class="v">{{ lastRaceSummary.finishTime }}</div></div>
@@ -46,7 +47,7 @@
             <p class="hint">Click card to flip</p>
           </template>
           <template #back>
-            <h3 class="card-title">Last race — full table</h3>
+            <h3 class="card-title">Last race — full table ({{ selectedClassId || '—' }})</h3>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -72,7 +73,8 @@
         <FlipCard>
           <template #front>
             <h3 class="card-title">Overall — {{ selectedClassId || '—' }}</h3>
-            <div v-if="!overallRows.length" class="empty">Loading…</div>
+            <div v-if="loading.overall" class="empty">Loading…</div>
+            <div v-else-if="!overallRows.length" class="empty">No data.</div>
             <div v-else class="stats">
               <div class="stat"><div class="k">Position</div><div class="v">{{ myOverall?.position || '–' }}</div></div>
               <div class="stat"><div class="k">Total</div><div class="v">{{ myOverall?.total || myOverall?.points || '–' }}</div></div>
@@ -152,18 +154,21 @@ import FlipCard from '../components/FlipCard.vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
-/* boat name highlight from auth metadata (if any) */
+/* highlight current user's boat (from auth metadata) */
 const boatName = ref('')
 async function loadBoatFromUser(){
   const { data } = await supabase.auth.getUser()
   boatName.value = data?.user?.user_metadata?.boat_name || ''
 }
-function isMe(name=''){ return boatName.value && name?.toUpperCase() === boatName.value.toUpperCase() }
+function isMe(name=''){
+  return boatName.value && (name || '').toUpperCase() === boatName.value.toUpperCase()
+}
 
-/* events */
+/* load events from DB */
 const regattas = ref([])
 const selectedRegattaId = ref('')
 const currentEvent = computed(() => regattas.value.find(r => r.id === selectedRegattaId.value) || null)
+const evId = () => currentEvent.value?.event_id || ''
 
 async function loadRegattas() {
   const { data, error } = await supabase
@@ -173,55 +178,48 @@ async function loadRegattas() {
     .order('starts_on', { ascending: false })
   if (!error) {
     regattas.value = data || []
+    // Default to your Maxi Worlds 2024 event if present
     const maxi = regattas.value.find(r => (r.event_id || '').toLowerCase() === 'xolfq')
     selectedRegattaId.value = maxi?.id || regattas.value[0]?.id || ''
   }
 }
-const evId = () => currentEvent.value?.event_id || ''
 
-/* classes & selection */
+/* classes */
 const classes = ref([])           // [{id,label}]
 const selectedClassId = ref('')
-
-function classLabel(c){ return c?.id || '—' }
-
 async function loadClasses(){
   classes.value = []
+  if (!evId()) return
   const json = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
-  // Use id (M1, M2, …) as label; incoming labels are just "Overall"
   classes.value = (json.results || []).map(x => ({ id: x.id, label: x.id }))
-  // If DB has a default class, you can pre-select it; else default M2 if present
+  // Default to M2 if present (as you requested), else first
   selectedClassId.value = classes.value.find(c => c.id === 'M2')?.id || classes.value[0]?.id || ''
 }
 
-/* races for the event (IDs only) */
+/* races (scoped to class) */
 const races = ref([]) // [{id,label}]
-async function loadRaces(){
+async function loadRacesForClass(){
   races.value = []
-  const json = await api(`/api/results-orc?type=races&eventId=${encodeURIComponent(evId())}`)
-  // title them as "RACE <id>"
+  if (!evId() || !selectedClassId.value) return
+  const json = await api(`/api/results-orc?type=racesForClass&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
   races.value = (json.results || []).map(r => ({ id: r.id, label: `RACE ${r.id}` }))
 }
 
-/* LAST race specifics for xolfq: raceId=13 with NO class in URL */
+/* “forced” last race for xolfq (13), otherwise fall back to last available id */
 const forcedLastRaceByEvent = { xolfq: '13' }
 const lastRaceId = computed(() => forcedLastRaceByEvent[evId()] || (races.value.at(-1)?.id || ''))
 const lastRaceTitle = computed(() => lastRaceId.value ? `RACE ${lastRaceId.value}` : 'RACE —')
 
-const lastRaceRows = ref([])
-const lastRaceSummary = ref({ position:'–', finishTime:'–', deltaToFirst:'–', deltaAhead:'–', deltaBehind:'–' })
-
-/* overall & race tables */
+/* datasets */
 const overallRows = ref([])
-const raceTables = ref({})      // {raceId: []}
-const raceSummaries = ref({})   // {raceId: {...}}
+const lastRaceRows = ref([])
+const raceTables = ref({})      // { [raceId]: rows[] }
+const raceSummaries = ref({})   // { [raceId]: summary }
 
 const myOverall = computed(() => overallRows.value.find(r => isMe(r.name)))
-
-/* filtered races: exclude last race in the bottom grid */
 const otherRaces = computed(() => races.value.filter(r => r.id !== lastRaceId.value))
 
-/* loading & error */
+/* ui state */
 const err = ref('')
 const loading = ref({
   classes:false, races:false, overall:false, last:false, sets:false,
@@ -261,15 +259,16 @@ async function reloadOverall(){
 }
 
 async function reloadLastRace(){
-  lastRaceRows.value = []; lastRaceSummary.value = { position:'–', finishTime:'–', deltaToFirst:'–', deltaAhead:'–', deltaBehind:'–' }
+  lastRaceRows.value = []
   loading.value.last = true
   try {
     if (!lastRaceId.value) return
-    // Raw race (no class in URL), per your instruction
-    const json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}`)
+    // raw race page, but tell API which class table to pick
+    const json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}&classId=${encodeURIComponent(selectedClassId.value)}`)
     const rows = (json.results || []).map((r,i)=>({ ...r, _key:'last-'+i }))
     lastRaceRows.value = rows
 
+    // summary for user's boat, with ahead/behind deltas
     const idx = rows.findIndex(r => isMe(r.name))
     const me = rows[idx]
     const ahead  = idx>0 ? rows[idx-1] : null
@@ -285,6 +284,8 @@ async function reloadLastRace(){
   } catch(e){ err.value = `Last race: ${e.message}` }
   finally { loading.value.last = false }
 }
+
+const lastRaceSummary = ref({ position:'–', finishTime:'–', deltaToFirst:'–', deltaAhead:'–', deltaBehind:'–' })
 
 async function loadOtherRaceTables(){
   raceTables.value = {}; raceSummaries.value = {}; loading.value.sets = true
@@ -314,18 +315,22 @@ async function loadOtherRaceTables(){
 /* orchestration */
 async function reloadClassData() {
   await reloadOverall()
+  await reloadRacesAndLast()
+}
+async function reloadRacesAndLast(){
+  await loadRacesForClass()
   await reloadLastRace()
   await loadOtherRaceTables()
 }
 async function reloadAll(){
   if (!selectedRegattaId.value) return
   await loadClasses()
-  await loadRaces()
   await reloadClassData()
 }
 
-/* react to event change */
-watch(selectedRegattaId, reloadAll)
+/* react to changes */
+watch(selectedRegattaId, () => reloadAll())
+watch(selectedClassId, () => reloadClassData())
 
 onMounted(async () => {
   await Promise.all([loadBoatFromUser(), loadRegattas()])
@@ -336,31 +341,40 @@ onMounted(async () => {
 <style scoped>
 .results-page { color:#fff; padding:12px; }
 
-/* toolbar */
+/* Toolbar */
 .toolbar { display:flex; justify-content:space-between; align-items:center; gap:.8rem; margin-bottom:.9rem; }
 .toolbar .left { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
 .toolbar .right { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
 label { font-size:.9rem; opacity:.9; }
 select {
-  background: rgba(255,255,255,.08); color:#fff;
-  border:1px solid rgba(255,255,255,.3); border-radius:10px; padding:.5rem .7rem;
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 10px;
+  padding: .5rem .7rem;
 }
 .pill { background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:.35rem .6rem; }
 .btn.ghost, .btn.link {
-  background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25);
-  border-radius:10px; padding:.5rem .8rem; color:#fff; text-decoration:none; cursor:pointer;
+  background: rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.25);
+  border-radius: 10px;
+  padding:.5rem .8rem;
+  color:#fff; cursor:pointer; text-decoration:none;
 }
 
-/* layout */
+/* Grid & Cards */
 .grid { display:grid; gap:16px; grid-template-columns: repeat(3, minmax(0,1fr)); }
-@media (max-width:1100px){ .grid { grid-template-columns: 1fr; } }
-
-.card { min-height:220px; }
-
-/* contents */
+@media (max-width: 1100px){ .grid { grid-template-columns: 1fr; } }
+.card { min-height: 220px; }
 .card-title { margin:0 0 .6rem 0; }
+
+/* Stats & Tables */
 .stats { display:grid; gap:10px; grid-template-columns: repeat(3, minmax(0,1fr)); }
-.stat { background: rgba(255,255,255,.06); padding:.7rem .8rem; border-radius:10px; }
+.stat {
+  background: rgba(255,255,255,.06);
+  padding:.7rem .8rem;
+  border-radius:10px;
+}
 .k { font-size:.8rem; opacity:.9; }
 .v { font-weight:800; font-size:1.15rem; }
 
@@ -370,7 +384,16 @@ th, td { text-align:left; padding:.5rem .6rem; border-bottom: 1px solid rgba(255
 tbody tr.me { background: rgba(0,255,170,.12); }
 
 .empty { opacity:.85; }
-.empty.big { opacity:.9; padding:1rem; background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.2); border-radius:12px; }
+.empty.big {
+  opacity:.9; padding: 1rem;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 12px;
+}
 .hint { margin-top:.6rem; opacity:.75; font-size:.85rem; }
-.error { margin:.6rem 0 0; color:#ffd4d4; background:rgba(255,0,0,.12); border:1px solid rgba(255,0,0,.25); padding:.6rem .7rem; border-radius:10px; }
+.error {
+  margin-top: 12px;
+  color:#ffd4d4; background:rgba(255,0,0,.12);
+  border:1px solid rgba(255,0,0,.25); padding:.6rem .7rem; border-radius:10px;
+}
 </style>
