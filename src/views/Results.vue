@@ -22,6 +22,7 @@
            :href="currentEvent.event_url" target="_blank" rel="noopener"
            class="btn link">Open event site</a>
         <span class="pill" v-if="boatName">Boat: {{ boatName }}</span>
+        <button class="btn ghost" @click="debugRaceLoading" title="Debug race loading issues">Debug</button>
         <button class="btn ghost" @click="reloadAll" :disabled="loading.any">Refresh</button>
       </div>
     </div>
@@ -112,19 +113,27 @@
       <div class="card">
         <h3 class="card-title">Other races</h3>
         <div v-if="loading.sets" class="empty">Loading…</div>
-        <div v-else-if="!otherRaces.length" class="empty">No other races.</div>
+        <div v-else-if="!otherRaces.length" class="empty">No other races available.</div>
         <div v-else class="race-list">
           <div v-for="r in otherRaces" :key="r.id" class="race-item">
             <div class="race-header">
               <strong>{{ r.label }}</strong>
-              <span class="position">{{ raceSummaries[r.id]?.position || '–' }}</span>
+              <span class="position" :class="{ 'no-data': !raceSummaries[r.id] || raceSummaries[r.id].position === '–' }">
+                {{ raceSummaries[r.id]?.position || '–' }}
+              </span>
             </div>
             <div class="race-details">
               <span>Finish: {{ raceSummaries[r.id]?.finishTime || '–' }}</span>
               <span>Δ to 1st: {{ raceSummaries[r.id]?.deltaToFirst || '–' }}</span>
             </div>
+            <div v-if="raceSummaries[r.id]?.finishTime === 'Error'" class="race-error">
+              Failed to load
+            </div>
           </div>
         </div>
+        <p v-if="err && otherRaces.length" class="debug-info">
+          Debug info available in browser console. Click Debug button above.
+        </p>
       </div>
     </div>
   </div>
@@ -229,6 +238,40 @@ const lastRaceSummary = ref({
   deltaBehind: '–' 
 })
 
+// Debug function to troubleshoot API issues
+async function debugRaceLoading() {
+  console.group('🐛 Debug Race Loading')
+  console.log('Event ID:', evId())
+  console.log('Class ID:', selectedClassId.value)
+  console.log('Last Race ID:', lastRaceId.value)
+  console.log('Other Races:', otherRaces.value.map(r => r.id))
+  
+  // Test API endpoints
+  try {
+    console.log('Testing classes API...')
+    const classesJson = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
+    console.log('Classes response:', classesJson)
+    
+    console.log('Testing racesForClass API...')
+    const racesJson = await api(`/api/results-orc?type=racesForClass&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
+    console.log('Races for class response:', racesJson)
+    
+    if (lastRaceId.value) {
+      console.log('Testing last race API (raceRaw)...')
+      const lastRaceJson = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}&classId=${encodeURIComponent(selectedClassId.value)}`)
+      console.log('Last race (raceRaw) response:', lastRaceJson)
+      
+      console.log('Testing last race API (race)...')
+      const lastRaceJson2 = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}&raceId=${encodeURIComponent(lastRaceId.value)}`)
+      console.log('Last race (race) response:', lastRaceJson2)
+    }
+  } catch (e) {
+    console.error('Debug API test failed:', e)
+  }
+  
+  console.groupEnd()
+}
+
 // Helper functions
 async function api(path){
   const r = await fetch(`${API_BASE}${path}`)
@@ -285,14 +328,26 @@ async function reloadLastRace(){
   loading.value.last = true
   
   try {
-    if (!lastRaceId.value) return
+    if (!lastRaceId.value) {
+      console.log('No lastRaceId available')
+      return
+    }
     
-    // Use raceRaw to get the race page and let API pick correct class table
-    const json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}&classId=${encodeURIComponent(selectedClassId.value)}`)
+    console.log(`Loading last race: ${lastRaceId.value} for class: ${selectedClassId.value}`)
     
-    if (json.success && json.results) {
+    // Try raceRaw first (multi-class page)
+    let json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}&classId=${encodeURIComponent(selectedClassId.value)}`)
+    
+    // If raceRaw fails or returns empty, try class-specific race URL
+    if (!json.success || !json.results || json.results.length === 0) {
+      console.log('raceRaw failed or empty, trying class-specific race URL')
+      json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}&raceId=${encodeURIComponent(lastRaceId.value)}`)
+    }
+    
+    if (json.success && json.results && json.results.length > 0) {
       const rows = json.results.map((r, i) => ({ ...r, _key: 'last-' + i }))
       lastRaceRows.value = rows
+      console.log(`Loaded ${rows.length} last race results`)
 
       // Calculate summary for user's boat with ahead/behind deltas
       const idx = rows.findIndex(r => isMe(r.name))
@@ -309,9 +364,11 @@ async function reloadLastRace(){
         deltaBehind: (behind && behind.correctedTime && me?.correctedTime) ? 
           mmssDelta(me.correctedTime, behind.correctedTime) : '–'
       }
+      
+      console.log('Last race summary:', lastRaceSummary.value)
     } else {
       console.error('Last race API error:', json)
-      err.value = json.message || 'Failed to load last race'
+      err.value = json.message || 'No data available for last race'
     }
   } catch(e) { 
     console.error('Last race loading error:', e)
@@ -327,13 +384,25 @@ async function loadOtherRaceTables(){
   loading.value.sets = true
   
   try {
+    console.log(`Loading ${otherRaces.value.length} other races`)
+    
     for (const r of otherRaces.value) {
       try {
-        const json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}&raceId=${encodeURIComponent(r.id)}`)
+        console.log(`Loading race ${r.id}`)
         
-        if (json.success && json.results) {
+        // Try class-specific race URL first
+        let json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}&raceId=${encodeURIComponent(r.id)}`)
+        
+        // If that fails, try raw race page
+        if (!json.success || !json.results || json.results.length === 0) {
+          console.log(`Class-specific race failed for ${r.id}, trying raw race`)
+          json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(r.id)}&classId=${encodeURIComponent(selectedClassId.value)}`)
+        }
+        
+        if (json.success && json.results && json.results.length > 0) {
           const rows = json.results.map((row, i) => ({ ...row, _key: `${r.id}-${i}` }))
           raceTables.value[r.id] = rows
+          console.log(`Loaded ${rows.length} results for race ${r.id}`)
 
           // Calculate summary for this race
           const idx = rows.findIndex(x => isMe(x.name))
@@ -350,13 +419,33 @@ async function loadOtherRaceTables(){
             deltaBehind: (behind && behind.correctedTime && me?.correctedTime) ? 
               mmssDelta(me.correctedTime, behind.correctedTime) : '–'
           }
+          
+          console.log(`Race ${r.id} summary:`, raceSummaries.value[r.id])
+        } else {
+          console.error(`No data for race ${r.id}:`, json)
+          // Set empty summary so UI shows something
+          raceSummaries.value[r.id] = {
+            position: '–',
+            finishTime: '–',
+            deltaToFirst: '–',
+            deltaAhead: '–',
+            deltaBehind: '–'
+          }
         }
       } catch(raceError) {
         console.error(`Error loading race ${r.id}:`, raceError)
-        // Continue with other races even if one fails
+        // Set error summary
+        raceSummaries.value[r.id] = {
+          position: '–',
+          finishTime: 'Error',
+          deltaToFirst: '–',
+          deltaAhead: '–',
+          deltaBehind: '–'
+        }
       }
     }
   } catch(e) { 
+    console.error('Race tables loading error:', e)
     err.value = `Race tables: ${e.message}` 
   } finally { 
     loading.value.sets = false 
@@ -585,11 +674,26 @@ tbody tr:hover {
   font-weight: 600;
   font-size: .85rem;
 }
+.position.no-data {
+  background: rgba(255,100,100,.12);
+  border: 1px solid rgba(255,100,100,.3);
+}
 .race-details {
   display: flex;
   gap: .8rem;
   font-size: .8rem;
   opacity: .8;
+}
+.race-error {
+  font-size: .75rem;
+  color: #ffaaaa;
+  margin-top: .2rem;
+}
+.debug-info {
+  margin-top: .8rem;
+  font-size: .75rem;
+  opacity: .6;
+  font-style: italic;
 }
 
 /* States */
