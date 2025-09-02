@@ -22,33 +22,24 @@
            :href="currentEvent.event_url" target="_blank" rel="noopener"
            class="btn link">Open event site</a>
         <span class="pill" v-if="boatName">Boat: {{ boatName }}</span>
-        <button class="btn ghost" @click="debugBoatFinding" :disabled="loading.any">
-          {{ loading.debug ? '🔍 Analyzing...' : '🔍 Debug Boat' }}
-        </button>
         <button class="btn ghost" @click="reloadAll" :disabled="loading.any">Refresh</button>
       </div>
     </div>
 
     <p v-if="!selectedRegattaId" class="empty big">Choose an event to load results.</p>
     <p v-if="err" class="error">{{ err }}</p>
-    
-    <!-- Quick test info -->
-    <div v-if="selectedRegattaId && !boatName" class="empty big">
-      No boat name set. Go to <router-link to="/account">Account</router-link> to set your boat name.
-      <br><small style="opacity:0.7">💡 Console tip: <code>setTestBoat("NORTHSTAR OF LONDON")</code> to test</small>
-    </div>
 
-    <div v-if="selectedRegattaId" class="grid">
-      <!-- LAST RACE (left) -->
+    <div v-if="selectedRegattaId && selectedClassId" class="grid">
+      <!-- LAST RACE (top) -->
       <div class="card">
         <FlipCard>
           <template #front>
-            <h3 class="card-title">{{ lastRaceTitle }}</h3>
+            <h3 class="card-title">Last race — {{ lastRaceTitle }}</h3>
             <div v-if="loading.last" class="empty">Loading…</div>
             <div v-else-if="!lastRaceRows.length" class="empty">No data.</div>
             <div v-else class="stats">
               <div class="stat"><div class="k">Position</div><div class="v">{{ lastRaceSummary.position }}</div></div>
-              <div class="stat"><div class="k">Finish time</div><div class="v">{{ lastRaceSummary.finishTime }}</div></div>
+              <div class="stat"><div class="k">Finish</div><div class="v">{{ lastRaceSummary.finishTime }}</div></div>
               <div class="stat"><div class="k">Δ to 1st</div><div class="v">{{ lastRaceSummary.deltaToFirst }}</div></div>
               <div class="stat"><div class="k">Δ in front</div><div class="v">{{ lastRaceSummary.deltaAhead }}</div></div>
               <div class="stat"><div class="k">Δ behind</div><div class="v">{{ lastRaceSummary.deltaBehind }}</div></div>
@@ -56,7 +47,7 @@
             <p class="hint">Click card to flip</p>
           </template>
           <template #back>
-            <h3 class="card-title">{{ lastRaceTitle }} — full table</h3>
+            <h3 class="card-title">Last race — full table ({{ selectedClassId || '—' }})</h3>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -88,15 +79,18 @@
               <div class="stat"><div class="k">Position</div><div class="v">{{ myOverall?.position || '–' }}</div></div>
               <div class="stat"><div class="k">Total</div><div class="v">{{ myOverall?.total || myOverall?.points || '–' }}</div></div>
               <div class="stat"><div class="k">Points</div><div class="v">{{ myOverall?.points || '–' }}</div></div>
+              <div class="stat"><div class="k">Sail No</div><div class="v">{{ myOverall?.sailNo || '–' }}</div></div>
+              <div class="stat"><div class="k">Skipper</div><div class="v">{{ myOverall?.skipper || '–' }}</div></div>
+              <div class="stat"><div class="k">Club</div><div class="v">{{ myOverall?.club || '–' }}</div></div>
             </div>
             <p class="hint">Click card to flip</p>
           </template>
           <template #back>
-            <h3 class="card-title">Overall — full table ({{ selectedClassId || '—' }})</h3>
+            <h3 class="card-title">Overall standings — {{ selectedClassId || '—' }}</h3>
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr><th>#</th><th>Boat</th><th>Sail No</th><th>Skipper</th><th>Total</th></tr>
+                  <tr><th>#</th><th>Boat</th><th>Sail No</th><th>Skipper</th><th>Club</th><th>Points</th></tr>
                 </thead>
                 <tbody>
                   <tr v-for="row in overallRows" :key="row._key" :class="{me: isMe(row.name)}">
@@ -104,6 +98,7 @@
                     <td>{{ row.name }}</td>
                     <td>{{ row.sailNo }}</td>
                     <td>{{ row.skipper }}</td>
+                    <td>{{ row.club }}</td>
                     <td>{{ row.total || row.points }}</td>
                   </tr>
                 </tbody>
@@ -115,79 +110,42 @@
 
       <!-- OTHER RACES (right) -->
       <div class="card">
-        <FlipCard>
-          <template #front>
-            <h3 class="card-title">Other races — {{ selectedClassId || '—' }}</h3>
-            <div v-if="loading.sets" class="empty">Loading…</div>
-            <div v-else-if="!otherRaces.length" class="empty">No other races yet.</div>
-            <div v-else class="stats">
-              <div v-for="race in otherRaces" :key="race.id" class="stat">
-                <div class="k">{{ race.label }}</div>
-                <div class="v">{{ raceSummaries[race.id]?.position || '–' }}</div>
-              </div>
+        <h3 class="card-title">Other races</h3>
+        <div v-if="loading.sets" class="empty">Loading…</div>
+        <div v-else-if="!otherRaces.length" class="empty">No other races.</div>
+        <div v-else class="race-list">
+          <div v-for="r in otherRaces" :key="r.id" class="race-item">
+            <div class="race-header">
+              <strong>{{ r.label }}</strong>
+              <span class="position">{{ raceSummaries[r.id]?.position || '–' }}</span>
             </div>
-            <p v-if="otherRaces.length" class="hint">Click card to flip</p>
-          </template>
-          <template #back>
-            <h3 class="card-title">Other races — pick one ({{ selectedClassId || '—' }})</h3>
-            <div v-if="loading.sets" class="empty">Loading…</div>
-            <div v-else-if="!otherRaces.length" class="empty">No other races yet.</div>
-            <div v-else>
-              <div v-for="race in otherRaces" :key="race.id" style="margin-bottom:1rem;">
-                <h4>{{ race.label }}</h4>
-                <div class="stats">
-                  <div class="stat"><div class="k">Position</div><div class="v">{{ raceSummaries[race.id]?.position || '–' }}</div></div>
-                  <div class="stat"><div class="k">Finish</div><div class="v">{{ raceSummaries[race.id]?.finishTime || '–' }}</div></div>
-                  <div class="stat"><div class="k">Δ to 1st</div><div class="v">{{ raceSummaries[race.id]?.deltaToFirst || '–' }}</div></div>
-                  <div class="stat"><div class="k">Δ in front</div><div class="v">{{ raceSummaries[race.id]?.deltaAhead || '–' }}</div></div>
-                  <div class="stat"><div class="k">Δ behind</div><div class="v">{{ raceSummaries[race.id]?.deltaBehind || '–' }}</div></div>
-                </div>
-              </div>
+            <div class="race-details">
+              <span>Finish: {{ raceSummaries[r.id]?.finishTime || '–' }}</span>
+              <span>Δ to 1st: {{ raceSummaries[r.id]?.deltaToFirst || '–' }}</span>
             </div>
-          </template>
-        </FlipCard>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { supabase } from '../lib/supabase'
 import FlipCard from '../components/FlipCard.vue'
 
+// Configuration
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
-/* highlight current user's boat (from auth metadata) */
+// User data
 const boatName = ref('')
-async function loadBoatFromUser(){
+async function loadBoatFromUser() {
   const { data } = await supabase.auth.getUser()
   boatName.value = data?.user?.user_metadata?.boat_name || ''
-  console.log('Loaded boat name from user metadata:', boatName.value)
-  console.log('💡 To test with NORTHSTAR OF LONDON, run: setTestBoat("NORTHSTAR OF LONDON")')
-}
-function isMe(name=''){
-  if (!boatName.value) return false
-  
-  // Normalize both names for comparison
-  const userBoat = boatName.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
-  const racingBoat = (name || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
-  
-  // Try exact match first
-  const exactMatch = userBoat === racingBoat
-  
-  // Try partial matches (handles "NORTHSTAR OF LONDON" vs "NORTHSTAR")
-  const partialMatch = userBoat.includes(racingBoat) || racingBoat.includes(userBoat)
-  
-  const match = exactMatch || (racingBoat.length > 3 && partialMatch)
-  
-  if (boatName.value) {
-    console.log(`Boat matching: "${boatName.value}" (${userBoat}) vs "${name}" (${racingBoat}) = ${match ? 'MATCH' : 'no match'}`)
-  }
-  return match
 }
 
-/* load events from DB */
+// Event selection
 const regattas = ref([])
 const selectedRegattaId = ref('')
 const currentEvent = computed(() => regattas.value.find(r => r.id === selectedRegattaId.value) || null)
@@ -207,128 +165,89 @@ async function loadRegattas() {
   }
 }
 
-/* classes */
-const classes = ref([])           // [{id,label}]
+// Classes
+const classes = ref([])
 const selectedClassId = ref('')
 async function loadClasses(){
   classes.value = []
   if (!evId()) return
-  const json = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
-  classes.value = (json.results || []).map(x => ({ id: x.id, label: x.id }))
-  
-  // For xolfq event, default to M2 (NORTHSTAR OF LONDON's class), otherwise try IRC, then first available
-  if (evId() === 'xolfq') {
-    const m2Class = classes.value.find(c => c.id === 'M2')
-    const ircClass = classes.value.find(c => /^IRC/i.test(c.id))
-    selectedClassId.value = m2Class?.id || ircClass?.id || classes.value[0]?.id || ''
-  } else {
-    // Default to M2 if present for other events, else first
+  try {
+    const json = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
+    classes.value = (json.results || []).map(x => ({ id: x.id, label: x.id }))
+    // Default to M2 if present, else first
     selectedClassId.value = classes.value.find(c => c.id === 'M2')?.id || classes.value[0]?.id || ''
-  }
-  
-  console.log('Available classes:', classes.value.map(c => c.id))
-  console.log('Selected class:', selectedClassId.value)
-}
-
-/* races (scoped to class) */
-const races = ref([]) // [{id,label,classRaceNumber}]
-
-// Mapping from ORC race ID to class race number for specific events  
-const raceNumberMappings = {
-  'xolfq': {
-    'M2': { '6': 1, '8': 2, '13': 3 }, // M2/IRC72 class: ORC races 6,8,13 = Class races 1,2,3
-    'IRC72': { '6': 1, '8': 2, '13': 3 }, // Same mapping for IRC72 alias
-    // Add more class mappings as needed
+  } catch(e) {
+    err.value = `Classes: ${e.message}`
   }
 }
 
-function getClassRaceNumber(orcRaceId, eventId, classId) {
-  const eventMapping = raceNumberMappings[eventId]
-  if (!eventMapping) return null
-  const classMapping = eventMapping[classId]
-  if (!classMapping) return null
-  return classMapping[orcRaceId] || null
-}
-
+// Races
+const races = ref([])
 async function loadRacesForClass(){
   races.value = []
   if (!evId() || !selectedClassId.value) return
-  
-  // For xolfq event with M2/IRC72 class, use specific race IDs
-  if (evId() === 'xolfq' && (selectedClassId.value === 'M2' || selectedClassId.value === 'IRC72')) {
-    const raceIds = ['6', '8', '13'] // ORC race IDs for M2/IRC72 class
-    races.value = raceIds.map((raceId, index) => {
-      const classRaceNumber = getClassRaceNumber(raceId, evId(), selectedClassId.value) || (index + 1)
-      return {
-        id: raceId,
-        label: `RACE ${classRaceNumber}`,
-        classRaceNumber: classRaceNumber,
-        orcRaceId: raceId
-      }
-    })
-    console.log('Using specific race IDs for M2/IRC72:', races.value)
-    return
+  try {
+    const json = await api(`/api/results-orc?type=racesForClass&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
+    races.value = (json.results || []).map(r => ({ id: r.id, label: `RACE ${r.id}` }))
+  } catch(e) {
+    err.value = `Races: ${e.message}`
   }
-  
-  // Default behavior: load all races for the class from the ORC page
-  const json = await api(`/api/results-orc?type=racesForClass&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
-  races.value = (json.results || []).map((r, index) => {
-    const classRaceNumber = getClassRaceNumber(r.id, evId(), selectedClassId.value)
-    const displayNumber = classRaceNumber || (index + 1) // fallback to sequential numbering
-    return { 
-      id: r.id, 
-      label: `RACE ${displayNumber}`,
-      classRaceNumber: displayNumber,
-      orcRaceId: r.id
-    }
-  })
 }
 
-/* "forced" last race for xolfq (13), otherwise fall back to last available id */
-const forcedLastRaceByEvent = { 
-  'xolfq': '13' // This is Race 3 for M2/IRC72 class
-}
+// Last race logic
+const forcedLastRaceByEvent = { xolfq: '13' }
 const lastRaceId = computed(() => forcedLastRaceByEvent[evId()] || (races.value.at(-1)?.id || ''))
-const lastRaceTitle = computed(() => {
-  if (!lastRaceId.value) return 'RACE —'
-  const race = races.value.find(r => r.id === lastRaceId.value)
-  if (race) {
-    return `${race.label} — ${selectedClassId.value || '—'}`
-  }
-  // Fallback: show class race number if we have mapping
-  const classRaceNumber = getClassRaceNumber(lastRaceId.value, evId(), selectedClassId.value)
-  return classRaceNumber ? `RACE ${classRaceNumber}` : `RACE ${lastRaceId.value}`
-})
+const lastRaceTitle = computed(() => lastRaceId.value ? `RACE ${lastRaceId.value}` : 'RACE —')
 
-/* datasets */
+// Data storage
 const overallRows = ref([])
 const lastRaceRows = ref([])
-const raceTables = ref({})      // { [raceId]: rows[] }
-const raceSummaries = ref({})   // { [raceId]: summary }
+const raceTables = ref({})
+const raceSummaries = ref({})
 
+// Computed values
 const myOverall = computed(() => overallRows.value.find(r => isMe(r.name)))
 const otherRaces = computed(() => races.value.filter(r => r.id !== lastRaceId.value))
 
-/* ui state */
+// UI state
 const err = ref('')
 const loading = ref({
-  classes:false, races:false, overall:false, last:false, sets:false, debug:false,
-  get any(){ return this.classes||this.races||this.overall||this.last||this.sets||this.debug }
+  classes: false, 
+  races: false, 
+  overall: false, 
+  last: false, 
+  sets: false,
+  get any(){ return this.classes || this.races || this.overall || this.last || this.sets }
 })
 
-/* helpers */
+// Last race summary
+const lastRaceSummary = ref({ 
+  position: '–', 
+  finishTime: '–', 
+  deltaToFirst: '–', 
+  deltaAhead: '–', 
+  deltaBehind: '–' 
+})
+
+// Helper functions
 async function api(path){
   const r = await fetch(`${API_BASE}${path}`)
-  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`)
   return r.json()
 }
+
+function isMe(name) {
+  return boatName.value && name && name.toLowerCase().includes(boatName.value.toLowerCase())
+}
+
 function toSec(str){
   if (!str) return null
   if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(str)) return null
   const p = str.split(':').map(Number)
   return p.length === 3 ? p[0]*3600 + p[1]*60 + p[2] : p[0]*60 + p[1]
 }
-function mmssDelta(a,b){
+
+function mmssDelta(a, b){
   const s1 = toSec(a), s2 = toSec(b)
   if (s1 == null || s2 == null) return '–'
   const d = Math.max(0, s2 - s1)
@@ -337,231 +256,387 @@ function mmssDelta(a,b){
   return `${mm}:${ss}`
 }
 
-/* debugging */
-async function debugBoatFinding() {
-  if (!evId() || !boatName.value) {
-    console.log('Cannot debug: missing event ID or boat name')
-    return
-  }
-  
-  loading.value.debug = true
-  console.log('🔍 Starting systematic boat analysis...')
-  
-  try {
-    const response = await fetch(`${API_BASE}/api/debug-boat-finder?eventId=${encodeURIComponent(evId())}&boatName=${encodeURIComponent(boatName.value)}`)
-    const result = await response.json()
-    
-    if (result.success) {
-      console.log('📋 STEP 1 - Main Website Structure:')
-      console.log(result.analysis.step1)
-      
-      console.log('🏁 STEP 2 - Entry List Analysis:')
-      console.log(result.analysis.step2)
-      
-      console.log('🏆 STEP 3 - Table Structures:')
-      console.log(result.analysis.step3)
-      
-      console.log('🎯 STEP 4 - Class Confirmation:')
-      console.log(result.analysis.step4)
-      
-      console.log('📊 STEP 5 - Boat Data:')
-      console.log(result.analysis.step5)
-      
-      console.log('📝 SUMMARY:')
-      console.log(result.analysis.summary)
-      
-      // Update class if we found the boat in a different class
-      if (result.analysis.step4.foundInClass && result.analysis.step4.foundInClass !== selectedClassId.value) {
-        console.log(`🔄 Switching to correct class: ${result.analysis.step4.foundInClass}`)
-        selectedClassId.value = result.analysis.step4.foundInClass
-      }
-      
-      // Show summary in UI
-      if (result.analysis.summary.success) {
-        err.value = `✅ Found ${result.analysis.summary.boatName} in class ${result.analysis.summary.correctClass}`
-      } else {
-        err.value = `❌ Could not find ${result.analysis.summary.boatName} in any class`
-      }
-    } else {
-      console.error('Debug analysis failed:', result.message)
-      err.value = `Debug failed: ${result.message}`
-    }
-  } catch (e) {
-    console.error('Failed to run debug analysis:', e)
-    err.value = `Debug error: ${e.message}`
-  } finally {
-    loading.value.debug = false
-  }
-}
-
-// Test function to quickly switch boat name for debugging
-async function setTestBoat(name) {
-  console.log(`🚢 Setting test boat to: ${name}`)
-  boatName.value = name
-  await reloadAll()
-}
-
-// Expose test function globally for console access
-window.setTestBoat = setTestBoat
-
-/* loaders */
+// Data loaders
 async function reloadOverall(){
-  overallRows.value = []; loading.value.overall = true
+  overallRows.value = []
+  loading.value.overall = true
+  err.value = ''
+  
   try {
     if (!selectedClassId.value) return
     const json = await api(`/api/results-orc?type=overall&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
-    overallRows.value = (json.results || []).map((r,i)=>({ ...r, _key:'ov'+i }))
-    console.log(`Overall: loaded ${overallRows.value.length} boats for class ${selectedClassId.value}`)
-    if (overallRows.value.length > 0) {
-      console.log('Sample boat names:', overallRows.value.slice(0, 3).map(r => r.name))
+    
+    if (json.success && json.results) {
+      overallRows.value = json.results.map((r, i) => ({ ...r, _key: 'ov' + i }))
+    } else {
+      console.error('Overall results API error:', json)
+      err.value = json.message || 'Failed to load overall results'
     }
-  } catch(e){ err.value = `Overall: ${e.message}` }
-  finally { loading.value.overall = false }
+  } catch(e) { 
+    console.error('Overall loading error:', e)
+    err.value = `Overall: ${e.message}` 
+  } finally { 
+    loading.value.overall = false 
+  }
 }
 
 async function reloadLastRace(){
   lastRaceRows.value = []
   loading.value.last = true
+  
   try {
     if (!lastRaceId.value) return
-    // raw race page, but tell API which class table to pick
+    
+    // Use raceRaw to get the race page and let API pick correct class table
     const json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}&classId=${encodeURIComponent(selectedClassId.value)}`)
-    const rows = (json.results || []).map((r,i)=>({ ...r, _key:'last-'+i }))
-    lastRaceRows.value = rows
-
-    // summary for user's boat, with ahead/behind deltas
-    const idx = rows.findIndex(r => isMe(r.name))
-    const me = rows[idx]
-    console.log(`Last race: found ${rows.length} boats, user boat index: ${idx}`, me ? `(${me.name} - ${me.finishTime})` : '(not found)')
     
-    // Special handling for DNF/RET boats
-    if (me && /^(DNF|DNS|DSQ|DNC|RET)$/i.test(me.finishTime)) {
-      console.log(`⚠️ Boat has special status: ${me.finishTime}`)
-    }
-    
-    const ahead  = idx>0 ? rows[idx-1] : null
-    const behind = idx>=0 && idx<rows.length-1 ? rows[idx+1] : null
+    if (json.success && json.results) {
+      const rows = json.results.map((r, i) => ({ ...r, _key: 'last-' + i }))
+      lastRaceRows.value = rows
 
-    lastRaceSummary.value = {
-      position: me?.position || '–',
-      finishTime: me?.finishTime || '–',
-      deltaToFirst: me?.deltaToFirst || '–',
-      deltaAhead: (ahead && ahead.correctedTime && me?.correctedTime) ? mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
-      deltaBehind: (behind && behind.correctedTime && me?.correctedTime) ? mmssDelta(me.correctedTime, behind.correctedTime) : '–'
+      // Calculate summary for user's boat with ahead/behind deltas
+      const idx = rows.findIndex(r => isMe(r.name))
+      const me = rows[idx]
+      const ahead = idx > 0 ? rows[idx - 1] : null
+      const behind = idx >= 0 && idx < rows.length - 1 ? rows[idx + 1] : null
+
+      lastRaceSummary.value = {
+        position: me?.position || '–',
+        finishTime: me?.finishTime || '–',
+        deltaToFirst: me?.deltaToFirst || '–',
+        deltaAhead: (ahead && ahead.correctedTime && me?.correctedTime) ? 
+          mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
+        deltaBehind: (behind && behind.correctedTime && me?.correctedTime) ? 
+          mmssDelta(me.correctedTime, behind.correctedTime) : '–'
+      }
+    } else {
+      console.error('Last race API error:', json)
+      err.value = json.message || 'Failed to load last race'
     }
-  } catch(e){ err.value = `Last race: ${e.message}` }
-  finally { loading.value.last = false }
+  } catch(e) { 
+    console.error('Last race loading error:', e)
+    err.value = `Last race: ${e.message}` 
+  } finally { 
+    loading.value.last = false 
+  }
 }
-
-const lastRaceSummary = ref({ position:'–', finishTime:'–', deltaToFirst:'–', deltaAhead:'–', deltaBehind:'–' })
 
 async function loadOtherRaceTables(){
-  raceTables.value = {}; raceSummaries.value = {}; loading.value.sets = true
+  raceTables.value = {}
+  raceSummaries.value = {}
+  loading.value.sets = true
+  
   try {
     for (const r of otherRaces.value) {
-      const json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}&raceId=${encodeURIComponent(r.id)}`)
-      const rows = (json.results || []).map((row,i)=>({ ...row, _key:`${r.id}-${i}` }))
-      raceTables.value[r.id] = rows
+      try {
+        const json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}&raceId=${encodeURIComponent(r.id)}`)
+        
+        if (json.success && json.results) {
+          const rows = json.results.map((row, i) => ({ ...row, _key: `${r.id}-${i}` }))
+          raceTables.value[r.id] = rows
 
-      const idx = rows.findIndex(x => isMe(x.name))
-      const me = rows[idx]
-      const ahead  = idx>0 ? rows[idx-1] : null
-      const behind = idx>=0 && idx<rows.length-1 ? rows[idx+1] : null
+          // Calculate summary for this race
+          const idx = rows.findIndex(x => isMe(x.name))
+          const me = rows[idx]
+          const ahead = idx > 0 ? rows[idx - 1] : null
+          const behind = idx >= 0 && idx < rows.length - 1 ? rows[idx + 1] : null
 
-      raceSummaries.value[r.id] = {
-        position:     me?.position || '–',
-        finishTime:   me?.finishTime || '–',
-        deltaToFirst: me?.deltaToFirst || '–',
-        deltaAhead:   (ahead && ahead.correctedTime && me?.correctedTime) ? mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
-        deltaBehind:  (behind && behind.correctedTime && me?.correctedTime) ? mmssDelta(me.correctedTime, behind.correctedTime) : '–'
+          raceSummaries.value[r.id] = {
+            position: me?.position || '–',
+            finishTime: me?.finishTime || '–',
+            deltaToFirst: me?.deltaToFirst || '–',
+            deltaAhead: (ahead && ahead.correctedTime && me?.correctedTime) ? 
+              mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
+            deltaBehind: (behind && behind.correctedTime && me?.correctedTime) ? 
+              mmssDelta(me.correctedTime, behind.correctedTime) : '–'
+          }
+        }
+      } catch(raceError) {
+        console.error(`Error loading race ${r.id}:`, raceError)
+        // Continue with other races even if one fails
       }
     }
-  } catch(e){ err.value = `Race tables: ${e.message}` }
-  finally { loading.value.sets = false }
+  } catch(e) { 
+    err.value = `Race tables: ${e.message}` 
+  } finally { 
+    loading.value.sets = false 
+  }
 }
 
-/* orchestration */
+// Orchestration functions
 async function reloadClassData() {
   await reloadOverall()
   await reloadRacesAndLast()
 }
+
 async function reloadRacesAndLast(){
   await loadRacesForClass()
   await reloadLastRace()
   await loadOtherRaceTables()
 }
+
 async function reloadAll(){
   if (!selectedRegattaId.value) return
+  err.value = '' // Clear any previous errors
   await loadClasses()
   await reloadClassData()
 }
 
-/* react to changes */
+// Reactive updates
 watch(selectedRegattaId, () => reloadAll())
 watch(selectedClassId, () => reloadClassData())
 
+// Initialize
 onMounted(async () => {
-  await Promise.all([loadBoatFromUser(), loadRegattas()])
-  if (selectedRegattaId.value) await reloadAll()
+  try {
+    await Promise.all([loadBoatFromUser(), loadRegattas()])
+    if (selectedRegattaId.value) {
+      await reloadAll()
+    }
+  } catch(e) {
+    console.error('Initialization error:', e)
+    err.value = `Initialization failed: ${e.message}`
+  }
 })
 </script>
 
 <style scoped>
-.results-page { color:#fff; padding:12px; }
+.results-page { 
+  color: #fff; 
+  padding: 12px; 
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+}
 
 /* Toolbar */
-.toolbar { display:flex; justify-content:space-between; align-items:center; gap:.8rem; margin-bottom:.9rem; }
-.toolbar .left { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
-.toolbar .right { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
-label { font-size:.9rem; opacity:.9; }
+.toolbar { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  gap: .8rem; 
+  margin-bottom: .9rem; 
+  flex-wrap: wrap;
+}
+.toolbar .left { 
+  display: flex; 
+  align-items: center; 
+  gap: .5rem; 
+  flex-wrap: wrap; 
+}
+.toolbar .right { 
+  display: flex; 
+  align-items: center; 
+  gap: .5rem; 
+  flex-wrap: wrap; 
+}
+
+label { 
+  font-size: .9rem; 
+  opacity: .9; 
+  font-weight: 500;
+}
+
 select {
   background: rgba(255,255,255,.08);
   color: #fff;
   border: 1px solid rgba(255,255,255,.3);
   border-radius: 10px;
   padding: .5rem .7rem;
+  font-size: .9rem;
+  min-width: 150px;
 }
-.pill { background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:.35rem .6rem; }
+select:focus {
+  outline: none;
+  border-color: rgba(255,255,255,.5);
+  background: rgba(255,255,255,.12);
+}
+
+.pill { 
+  background: rgba(255,255,255,.12); 
+  border: 1px solid rgba(255,255,255,.25); 
+  border-radius: 999px; 
+  padding: .35rem .6rem; 
+  font-size: .85rem;
+}
+
 .btn.ghost, .btn.link {
   background: rgba(255,255,255,.12);
-  border:1px solid rgba(255,255,255,.25);
+  border: 1px solid rgba(255,255,255,.25);
   border-radius: 10px;
-  padding:.5rem .8rem;
-  color:#fff; cursor:pointer; text-decoration:none;
+  padding: .5rem .8rem;
+  color: #fff; 
+  cursor: pointer; 
+  text-decoration: none;
+  font-size: .9rem;
+  transition: all 0.2s ease;
+}
+.btn.ghost:hover, .btn.link:hover {
+  background: rgba(255,255,255,.18);
+  border-color: rgba(255,255,255,.4);
+}
+.btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 
 /* Grid & Cards */
-.grid { display:grid; gap:16px; grid-template-columns: repeat(3, minmax(0,1fr)); }
-@media (max-width: 1100px){ .grid { grid-template-columns: 1fr; } }
-.card { min-height: 220px; }
-.card-title { margin:0 0 .6rem 0; }
+.grid { 
+  display: grid; 
+  gap: 16px; 
+  grid-template-columns: repeat(3, minmax(0, 1fr)); 
+}
+@media (max-width: 1100px) { 
+  .grid { grid-template-columns: 1fr; } 
+}
+
+.card { 
+  min-height: 220px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 16px;
+  padding: 1rem;
+  backdrop-filter: blur(10px);
+}
+
+.card-title { 
+  margin: 0 0 .6rem 0; 
+  font-size: 1.1rem;
+  font-weight: 600;
+}
 
 /* Stats & Tables */
-.stats { display:grid; gap:10px; grid-template-columns: repeat(3, minmax(0,1fr)); }
+.stats { 
+  display: grid; 
+  gap: 10px; 
+  grid-template-columns: repeat(3, minmax(0, 1fr)); 
+}
+@media (max-width: 768px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
 .stat {
   background: rgba(255,255,255,.06);
-  padding:.7rem .8rem;
-  border-radius:10px;
+  padding: .7rem .8rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.1);
 }
-.k { font-size:.8rem; opacity:.9; }
-.v { font-weight:800; font-size:1.15rem; }
+.k { 
+  font-size: .8rem; 
+  opacity: .9; 
+  margin-bottom: .2rem;
+}
+.v { 
+  font-weight: 800; 
+  font-size: 1.15rem; 
+  color: #fff;
+}
 
-.table-wrap { overflow:auto; border-radius:12px; }
-table { width:100%; border-collapse: collapse; }
-th, td { text-align:left; padding:.5rem .6rem; border-bottom: 1px solid rgba(255,255,255,.12); }
-tbody tr.me { background: rgba(0,255,170,.12); }
+.table-wrap { 
+  overflow: auto; 
+  border-radius: 12px; 
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.1);
+}
+table { 
+  width: 100%; 
+  border-collapse: collapse; 
+}
+th, td { 
+  text-align: left; 
+  padding: .5rem .6rem; 
+  border-bottom: 1px solid rgba(255,255,255,.12); 
+}
+th {
+  background: rgba(255,255,255,.08);
+  font-weight: 600;
+  font-size: .85rem;
+  opacity: .9;
+}
+tbody tr.me { 
+  background: rgba(0,255,170,.12); 
+  border-left: 3px solid #00ffaa;
+}
+tbody tr:hover {
+  background: rgba(255,255,255,.04);
+}
 
-.empty { opacity:.85; }
+/* Race list */
+.race-list {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+.race-item {
+  background: rgba(255,255,255,.06);
+  padding: .6rem .8rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+}
+.race-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .3rem;
+}
+.position {
+  background: rgba(255,255,255,.12);
+  padding: .2rem .5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: .85rem;
+}
+.race-details {
+  display: flex;
+  gap: .8rem;
+  font-size: .8rem;
+  opacity: .8;
+}
+
+/* States */
+.empty { 
+  opacity: .85; 
+  text-align: center;
+  padding: 1rem;
+}
 .empty.big {
-  opacity:.9; padding: 1rem;
+  opacity: .9; 
+  padding: 2rem 1rem;
   background: rgba(255,255,255,.06);
   border: 1px solid rgba(255,255,255,.2);
   border-radius: 12px;
+  font-size: 1.1rem;
 }
-.hint { margin-top:.6rem; opacity:.75; font-size:.85rem; }
+
+.hint { 
+  margin-top: .6rem; 
+  opacity: .75; 
+  font-size: .85rem; 
+  text-align: center;
+  font-style: italic;
+}
+
 .error {
   margin-top: 12px;
-  color:#ffd4d4; background:rgba(255,0,0,.12);
-  border:1px solid rgba(255,0,0,.25); padding:.6rem .7rem; border-radius:10px;
+  color: #ffd4d4; 
+  background: rgba(255,0,0,.12);
+  border: 1px solid rgba(255,0,0,.25); 
+  padding: .6rem .7rem; 
+  border-radius: 10px;
+  font-size: .9rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .results-page {
+    padding: 8px;
+  }
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .toolbar .left,
+  .toolbar .right {
+    justify-content: center;
+  }
 }
 </style>
