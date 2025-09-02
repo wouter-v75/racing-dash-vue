@@ -15,6 +15,9 @@ export default async function handler(req, res) {
     const eventId = String(q.eventId || '')
     const classId = q.classId != null ? String(q.classId) : ''
     const raceId  = q.raceId  != null ? String(q.raceId)  : ''
+    const raceUrlRaw = (eventId, rId) =>
+  `https://data.orc.org/public/WEV.dll?action=race&eventid=${encodeURIComponent(eventId)}&raceid=${encodeURIComponent(rId)}`
+
 
     if (type === 'ping') {
       return res.status(200).json({ ok: true, runtime, node: process.versions?.node, time: new Date().toISOString() })
@@ -73,6 +76,13 @@ export default async function handler(req, res) {
       const htmlRace = await fetchText(raceUrl(eventId, cls, last.id))
       const rows = safeParse(parseRace, htmlRace)
       return ok(res, 'race', rows, { eventId, classId: cls, raceId: last.id, raceLabel: last.label })
+    }
+    
+    if (type === 'raceRaw') {
+       if (!raceId) return res.status(400).json({ success:false, message:'Missing raceId' })
+       const html = await fetchText(raceUrlRaw(eventId, raceId)) // no classId on purpose
+       const rows = safeParse(parseRace, html)
+       return ok(res, 'race', rows, { eventId, classId: null, raceId })
     }
 
     return res.status(400).json({ success:false, message:'Unknown type' })
