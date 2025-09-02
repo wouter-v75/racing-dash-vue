@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ORC Diagnostic Test</title>
+    <style>
+        body { 
+            font-family: monospace; 
+            background: #1a1a1a; 
+            color: #00ff00; 
+            padding: 20px; 
+            line-height: 1.4;
+        }
+        .result { 
+            background: #000; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+            border: 1px solid #333;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error { 
+            color: #ff6666; 
+            background: #330000; 
+        }
+        .success { 
+            color: #66ff66; 
+            background: #003300; 
+        }
+        button {
+            background: #333;
+            color: #00ff00;
+            border: 1px solid #666;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover { background: #444; }
+        pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+        .highlight { background: #ffff0033; color: #ffff00; font-weight: bold; }
+        .table-preview { background: #222; padding: 10px; margin: 10px 0; border-radius: 3px; }
+        .quick-links {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .quick-links a {
+            color: #00ffff;
+            margin-right: 15px;
+            text-decoration: none;
+        }
+        .quick-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>🩺 ORC Parsing Diagnostic</h1>
+    <p>Troubleshooting why boat results aren't loading...</p>
+    
+    <div class="quick-links">
+        <strong>Quick Links:</strong><br>
+        <a href="/api/results-orc?type=diagnose&eventId=xolfq&classId=M2" target="_blank">📊 Raw Diagnostic JSON</a>
+        <a href="/api/results-orc?type=overall&eventId=xolfq&classId=M2" target="_blank">🏆 Overall API Test</a>
+        <a href="/api/results-orc?type=raceRaw&eventId=xolfq&raceId=13&classId=M2" target="_blank">🏁 Race API Test</a>
+        <a href="https://data.orc.org/public/WEV.dll?action=series&eventid=xolfq&classid=M2" target="_blank">🌐 ORC Direct</a>
+    </div>
+    
+    <button onclick="runFullDiagnosis()">🔍 Run Full Diagnosis</button>
+    <button onclick="testQuick()">⚡ Quick Test</button>
+    <button onclick="clear()">Clear</button>
+
+    <div id="output"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `<strong>[${new Date().toLocaleTimeString()}]</strong> ${message}`;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clear() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        async function testQuick() {
+            log('⚡ Running quick diagnostic...', 'info');
+            
+            try {
+                // Test overall API
+                const response = await fetch('/api/results-orc?type=overall&eventId=xolfq&classId=M2');
+                const data = await response.json();
+                
+                log(`API Status: ${response.ok ? 'OK' : 'ERROR'}`, response.ok ? 'success' : 'error');
+                log(`Results Found: ${data.results?.length || 0} boats`);
+                
+                if (data.results?.length > 0) {
+                    log(`🎉 SUCCESS! Found boats:`, 'success');
+                    data.results.forEach((boat, i) => {
+                        const isNorthstar = boat.name && boat.name.toLowerCase().includes('northstar');
+                        log(`${i + 1}. "${boat.name}" (${boat.position})${isNorthstar ? ' ⭐' : ''}`, isNorthstar ? 'success' : 'info');
+                    });
+                } else {
+                    log(`❌ No boats found - need detailed diagnosis`, 'error');
+                    log(`Check server logs or run full diagnosis`, 'error');
+                }
+                
+            } catch (error) {
+                log(`❌ Test failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function runFullDiagnosis() {
+            log('🩺 Running comprehensive diagnosis...', 'info');
+            
+            try {
+                const response = await fetch('/api/results-orc?type=diagnose&eventId=xolfq&classId=M2');
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('✅ Diagnostic successful!', 'success');
+                    
+                    log(`<strong>📊 HTML Structure:</strong>
+• Event: xolfq, Class: M2  
+• HTML Size: ${data.meta.htmlLength.toLocaleString()} chars
+• Tables Found: ${data.meta.tablesFound}
+• Source: ${data.url}`, 'info');
+
+                    if (data.tables?.length > 0) {
+                        log(`<strong>📋 Table Analysis:</strong>`, 'info');
+                        
+                        let northstarFound = false;
+                        
+                        data.tables.forEach((table, i) => {
+                            const tableHasNorthstar = table.sampleRow.some(cell => 
+                                cell && cell.toLowerCase().includes('northstar')
+                            );
+                            
+                            if (tableHasNorthstar) northstarFound = true;
+                            
+                            log(`<div class="table-preview">
+<strong>Table ${i}${tableHasNorthstar ? ' ⭐ HAS NORTHSTAR!' : ''}</strong>
+• Rows: ${table.rowCount}
+• Headers: [${table.headers.slice(0, 8).map(h => `"${h}"`).join(', ')}]
+• Sample: [${table.sampleRow.slice(0, 8).map(c => `"${c}"`).join(', ')}]
+</div>`, tableHasNorthstar ? 'success' : 'info');
+                        });
+                        
+                        if (northstarFound) {
+                            log(`🎯 <span class="highlight">NORTHSTAR FOUND IN TABLE DATA!</span>`, 'success');
+                            log(`The issue is in the parsing logic, not the data source.`, 'success');
+                        } else {
+                            log(`❌ Northstar not found in any table samples`, 'error');
+                            log(`Either wrong class/event, or boat name is different in ORC data`, 'error');
+                        }
+                    } else {
+                        log(`❌ No tables extracted from HTML`, 'error');
+                        log(`Check if ORC HTML structure has changed`, 'error');
+                    }
+                    
+                    // Show HTML preview
+                    if (data.htmlPreview) {
+                        const htmlHasNorthstar = data.htmlPreview.toLowerCase().includes('northstar');
+                        log(`<strong>📝 HTML Preview${htmlHasNorthstar ? ' ⭐ Contains Northstar!' : ''}:</strong>
+<pre style="max-height: 300px; overflow-y: auto;">${data.htmlPreview}</pre>`, htmlHasNorthstar ? 'success' : 'info');
+                        
+                        if (htmlHasNorthstar) {
+                            log(`✅ Northstar is in the raw HTML - parsing issue confirmed`, 'success');
+                        } else {
+                            log(`❌ Northstar not in HTML - wrong event/class or different boat name`, 'error');
+                        }
+                    }
+                    
+                } else {
+                    log(`❌ Diagnosis failed: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Diagnosis error: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run quick test on load
+        window.addEventListener('load', () => {
+            setTimeout(testQuick, 1000);
+        });
+    </script>
+</body>
+</html>
