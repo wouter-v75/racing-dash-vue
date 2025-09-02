@@ -1,4 +1,4 @@
-// api/results-orc.js
+// api/results-orc.js - SIMPLE & ROBUST VERSION
 export const runtime = 'nodejs'
 
 export default async function handler(req, res) {
@@ -15,6 +15,8 @@ export default async function handler(req, res) {
     const classId = q.classId != null ? String(q.classId) : ''
     const raceId  = q.raceId  != null ? String(q.raceId)  : ''
 
+    console.log(`[ORC API] ${type} request - Event: ${eventId}, Class: ${classId}, Race: ${raceId}`)
+
     if (type === 'ping') {
       return res.status(200).json({ ok: true, runtime, node: process.versions?.node, time: new Date().toISOString() })
     }
@@ -24,41 +26,64 @@ export default async function handler(req, res) {
 
     if (type === 'debug') {
       const html = await fetchText(indexUrl(eventId))
-      const tables = allTables(html)
-      const classes = safeParse(parseClasses, html)
+      const tables = extractAllTables(html)
+      const classes = parseClasses(html)
       return res.status(200).json({ 
         success:true, 
         resultType:'debug', 
         meta:{ eventId, runtime, htmlLength: html.length, tablesFound: tables.length }, 
         preview: html.slice(0, 1400),
-        classes: classes
+        classes: classes,
+        sampleTable: tables.length > 0 ? extractTableData(tables[0]).slice(0, 3) : []
       })
     }
 
     if (type === 'classes') {
       const html = await fetchText(indexUrl(eventId))
-      const classes = safeParse(parseClasses, html)
+      const classes = parseClasses(html)
+      console.log(`[CLASSES] Found ${classes.length} classes: ${classes.map(c => c.id).join(', ')}`)
       return ok(res, 'classes', classes, { eventId })
     }
 
     if (type === 'racesForClass') {
       if (!classId) return res.status(400).json({ success:false, message:'Missing classId' })
       const html = await fetchText(indexUrl(eventId))
-      const races = safeParse(h => parseRacesForClass(h, classId), html)
+      const races = parseRacesForClass(html, classId)
+      console.log(`[RACES] Found ${races.length} races for class ${classId}`)
       return ok(res, 'races', races, { eventId, classId })
     }
 
     if (type === 'races') {
       const html = await fetchText(indexUrl(eventId))
-      const races = safeParse(parseRacesAnyClass, html)
+      const races = parseRacesAnyClass(html)
+      console.log(`[RACES] Found ${races.length} total races`)
       return ok(res, 'races', races, { eventId })
     }
 
     if (type === 'overall') {
       const cls = classId || (await autoFirstClass(eventId))
       if (!cls) return ok(res, 'overall', [], { eventId, classId: null })
-      const html = await fetchText(seriesUrl(eventId, cls))
-      const rows = safeParse(parseOverallByHeaders, html)
+      
+      const url = seriesUrl(eventId, cls)
+      console.log(`[OVERALL] Fetching: ${url}`)
+      const html = await fetchText(url)
+      console.log(`[OVERALL] HTML length: ${html.length}`)
+      
+      const rows = parseOverallStandings(html)
+      console.log(`[OVERALL] Parsed ${rows.length} boats`)
+      
+      if (rows.length > 0) {
+        console.log(`[OVERALL] Sample boats: ${rows.slice(0, 3).map(r => `"${r.name}"`).join(', ')}`)
+      } else {
+        console.log(`[OVERALL] No boats found - debugging table structure...`)
+        const tables = extractAllTables(html)
+        console.log(`[OVERALL] Found ${tables.length} tables in HTML`)
+        tables.forEach((table, i) => {
+          const data = extractTableData(table)
+          console.log(`[OVERALL] Table ${i}: ${data.length} rows, sample: ${data.slice(0, 2).map(row => row.slice(0, 3).join('|')).join(' // ')}`)
+        })
+      }
+      
       return ok(res, 'overall', rows, { eventId, classId: cls })
     }
 
@@ -66,22 +91,34 @@ export default async function handler(req, res) {
       if (!raceId) return res.status(400).json({ success:false, message:'Missing raceId' })
       const cls = classId || (await autoFirstClass(eventId))
       if (!cls) return ok(res, 'race', [], { eventId, classId: null, raceId })
-      const html = await fetchText(raceUrl(eventId, cls, raceId))
-      const rows = safeParse(parseRaceForClass, html)
+      
+      const url = raceUrl(eventId, cls, raceId)
+      console.log(`[RACE] Fetching: ${url}`)
+      const html = await fetchText(url)
+      
+      const rows = parseRaceResults(html)
+      console.log(`[RACE] Parsed ${rows.length} boats for race ${raceId}`)
+      
       return ok(res, 'race', rows, { eventId, classId: cls, raceId })
     }
 
     if (type === 'raceRaw') {
       if (!raceId) return res.status(400).json({ success:false, message:'Missing raceId' })
-      const html = await fetchText(raceUrlRaw(eventId, raceId))
-      const rows = safeParse(h => parseRaceChooseClass(h, classId || ''), html)
+      
+      const url = raceUrlRaw(eventId, raceId)
+      console.log(`[RACE RAW] Fetching: ${url}`)
+      const html = await fetchText(url)
+      
+      const rows = parseRaceResultsForClass(html, classId)
+      console.log(`[RACE RAW] Parsed ${rows.length} boats for race ${raceId} class ${classId}`)
+      
       return ok(res, 'race', rows, { eventId, classId: classId || null, raceId })
     }
 
     return res.status(400).json({ success:false, message:'Unknown type' })
   } catch (e) {
     console.error('ORC handler error:', e)
-    return res.status(500).json({ success:false, message: String(e?.message || e) })
+    return res.status(500).json({ success:false, message: String(e?.message || e), stack: e?.stack })
   }
 }
 
@@ -93,6 +130,7 @@ const raceUrlRaw   = (eventId, rId)      => `https://data.orc.org/public/WEV.dll
 
 /* ---------- HTTP ---------- */
 async function fetchText(url) {
+  console.log(`[FETCH] ${url}`)
   const r = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; racingdash/1.0)',
@@ -100,347 +138,305 @@ async function fetchText(url) {
     }
   })
   if (!r.ok) throw new Error(`Fetch failed ${r.status} for ${url}`)
-  return r.text()
+  const text = await r.text()
+  console.log(`[FETCH] Success: ${text.length} chars`)
+  return text
 }
 
 function ok(res, resultType, results, meta = {}) {
   return res.status(200).json({ success:true, resultType, results, meta, lastUpdated:new Date().toISOString() })
 }
 
-function safeParse(fn, html) {
-  try { 
-    return fn(html)
-  } catch (e) {
-    console.error(`Parse error in ${fn.name}:`, e)
-    return []
-  }
-}
-
-/* ---------- Utils ---------- */
-function decodeEntities(s) {
-  return String(s || '')
+/* ---------- HTML Utils ---------- */
+function cleanText(str) {
+  return String(str || '')
     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-}
-
-function cleanup(s) {
-  return decodeEntities(String(s || ''))
-    .replace(new RegExp("<[^>]+>", "g"), " ")
-    .replace(/\u00A0/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\u00A0/g, ' ')
     .trim()
 }
 
-function toSec(str) {
-  if (!str) return null
-  if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(str)) return null
-  const p = str.split(':').map(Number)
-  return p.length === 3 ? p[0]*3600 + p[1]*60 + p[2] : p[0]*60 + p[1]
-}
-
-function mmssDelta(a, b) {
-  const s1 = toSec(a), s2 = toSec(b)
-  if (s1 == null || s2 == null) return '–'
-  const d = Math.max(0, s2 - s1)
-  const mm = String(Math.floor(d/60)).padStart(2,'0')
-  const ss = String(d % 60).padStart(2,'0')
-  return `${mm}:${ss}`
-}
-
-/* ---------- Table extraction ---------- */
-function allTables(html) {
-  const tableRe = new RegExp("<table[\\s\\S]*?<\\/table>", "gi")
-  const out = []
-  let m
-  while ((m = tableRe.exec(html)) !== null) out.push({ html: m[0], index: m.index })
-  return out
-}
-
-function tableRows(tableHtml) {
-  const trsRe  = new RegExp("<tr[\\s\\S]*?<\\/tr>", "gi")
-  const cellRe = new RegExp("<t[dh][^>]*>([\\s\\S]*?)<\\/t[dh]>", "gi")
-  const rows = []
-  let rm
-  while ((rm = trsRe.exec(tableHtml)) !== null) {
-    const rowHtml = rm[0]
-    const cells = []
-    let cm
-    while ((cm = cellRe.exec(rowHtml)) !== null) cells.push(cleanup(cm[1]))
-    if (cells.length) rows.push(cells)
+function extractAllTables(html) {
+  const tables = []
+  const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi
+  let match
+  while ((match = tableRegex.exec(html)) !== null) {
+    tables.push(match[1])
   }
+  return tables
+}
+
+function extractTableData(tableHtml) {
+  const rows = []
+  const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+  let rowMatch
+  
+  while ((rowMatch = rowRegex.exec(tableHtml)) !== null) {
+    const cells = []
+    const cellRegex = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi
+    let cellMatch
+    
+    while ((cellMatch = cellRegex.exec(rowMatch[1])) !== null) {
+      cells.push(cleanText(cellMatch[1]))
+    }
+    
+    if (cells.length > 0) {
+      rows.push(cells)
+    }
+  }
+  
   return rows
 }
 
-function findColumnByName(headers, patterns) {
-  for (let i = 0; i < headers.length; i++) {
-    const header = headers[i].toLowerCase().trim()
-    for (const pattern of patterns) {
-      if (header.includes(pattern.toLowerCase())) {
-        return i
-      }
-    }
-  }
-  return -1
-}
+/* ---------- SIMPLE PARSERS ---------- */
 
-function findBoatNameColumn(headers, rows) {
-  // First try header-based detection
-  const headerPatterns = ['yacht', 'boat', 'name', 'sail name', 'yacht name']
-  let boatCol = findColumnByName(headers, headerPatterns)
+function parseOverallStandings(html) {
+  console.log(`[PARSE OVERALL] Starting parse...`)
+  const tables = extractAllTables(html)
+  console.log(`[PARSE OVERALL] Found ${tables.length} tables`)
   
-  if (boatCol !== -1) {
-    return boatCol
-  }
-  
-  // Fallback: analyze content to find boat name column
-  if (rows.length > 1) {
-    for (let col = 1; col < Math.min(headers.length, 6); col++) {
-      const sampleValue = rows[1][col] || ''
-      
-      // Check if this looks like a boat name:
-      // - Not a number
-      // - Reasonable length (3+ chars)
-      // - Contains letters
-      const isBoatName = sampleValue &&
-                        isNaN(parseFloat(sampleValue)) &&
-                        sampleValue.length >= 3 &&
-                        /[a-zA-Z]/.test(sampleValue) &&
-                        !sampleValue.match(/^\d+$/)
-      
-      if (isBoatName) {
-        return col
-      }
-    }
-  }
-  
-  // Last resort: assume column 1 if it exists
-  return headers.length > 1 ? 1 : -1
-}
-
-function safeGet(arr, idx, fallback = '') {
-  return (idx >= 0 && idx < arr.length && arr[idx] != null) ? String(arr[idx]).trim() : fallback
-}
-
-/* ---------- FIXED Parsing ---------- */
-function parseOverallByHeaders(htmlRaw) {
-  const tables = allTables(htmlRaw)
-  
-  // Find the standings table (has position and points/total columns)
-  const standingsTable = tables.find(t => {
-    const rows = tableRows(t.html)
-    if (!rows.length) return false
-    const headers = rows[0].map(x => x.toLowerCase())
-    const hasPos = headers.some(h => /^(pos|#|position)$/.test(h))
-    const hasPoints = headers.some(h => /(points|pts|total|score)/.test(h))
-    return hasPos && hasPoints
-  }) || tables[0]
-
-  if (!standingsTable) return []
-  
-  const rows = tableRows(standingsTable.html)
-  if (rows.length < 2) return []
-
-  const headers = rows[0].map(x => x.trim())
-  
-  // Smart column detection
-  const posCol = findColumnByName(headers, ['pos', 'position', '#']) || 0
-  const boatCol = findBoatNameColumn(headers, rows)
-  const sailCol = findColumnByName(headers, ['sail', 'nr', 'no', 'number'])
-  const skipperCol = findColumnByName(headers, ['skipper', 'owner', 'helm'])
-  const pointsCol = findColumnByName(headers, ['points', 'pts', 'score'])
-  const totalCol = findColumnByName(headers, ['total', 'net', 'overall'])
-
-  if (boatCol === -1) {
-    console.error('Could not identify boat name column')
+  if (tables.length === 0) {
+    console.log(`[PARSE OVERALL] No tables found`)
     return []
   }
-
-  const results = []
-  for (let r = 1; r < rows.length; r++) {
-    const cells = rows[r]
+  
+  // Try each table until we find one with standings data
+  for (let i = 0; i < tables.length; i++) {
+    console.log(`[PARSE OVERALL] Trying table ${i}...`)
+    const rows = extractTableData(tables[i])
     
-    // Skip non-data rows
-    if (!cells[posCol] || isNaN(parseInt(cells[posCol], 10))) continue
-    
-    const entry = {
-      position: safeGet(cells, posCol),
-      name: safeGet(cells, boatCol),
-      sailNo: safeGet(cells, sailCol >= 0 ? sailCol : boatCol + 1),
-      skipper: safeGet(cells, skipperCol >= 0 ? skipperCol : boatCol + 2),
-      points: safeGet(cells, pointsCol >= 0 ? pointsCol : cells.length - 2),
-      total: safeGet(cells, totalCol >= 0 ? totalCol : cells.length - 1)
+    if (rows.length < 2) {
+      console.log(`[PARSE OVERALL] Table ${i} has too few rows (${rows.length})`)
+      continue
     }
     
-    // Only include entries with valid name
-    if (entry.name && entry.name.length > 1) {
-      results.push(entry)
+    const headers = rows[0].map(h => h.toLowerCase())
+    console.log(`[PARSE OVERALL] Table ${i} headers: [${headers.join(', ')}]`)
+    
+    // Check if this looks like a standings table
+    const hasPosition = headers.some(h => h.includes('pos') || h === '#' || h.includes('position'))
+    const hasPoints = headers.some(h => h.includes('point') || h.includes('pts') || h.includes('total') || h.includes('score'))
+    
+    console.log(`[PARSE OVERALL] Table ${i} - hasPos: ${hasPosition}, hasPoints: ${hasPoints}`)
+    
+    if (hasPosition || hasPoints || i === 0) { // Use first table as fallback
+      console.log(`[PARSE OVERALL] Using table ${i}`)
+      const standings = parseStandingsTable(rows)
+      if (standings.length > 0) {
+        return standings
+      }
     }
   }
   
+  console.log(`[PARSE OVERALL] No valid standings table found`)
+  return []
+}
+
+function parseStandingsTable(rows) {
+  const results = []
+  const headers = rows[0]
+  
+  console.log(`[PARSE STANDINGS] Headers: [${headers.join(' | ')}]`)
+  
+  // Try to identify columns by analyzing first few data rows
+  let posCol = 0
+  let nameCol = 1
+  
+  // Look for the boat name column (longest non-numeric text)
+  if (rows.length > 1) {
+    let maxTextLength = 0
+    for (let col = 0; col < Math.min(headers.length, 6); col++) {
+      const sampleText = rows[1][col] || ''
+      if (sampleText.length > maxTextLength && isNaN(parseFloat(sampleText)) && sampleText.length > 2) {
+        nameCol = col
+        maxTextLength = sampleText.length
+      }
+    }
+    console.log(`[PARSE STANDINGS] Detected name column: ${nameCol} ("${rows[1][nameCol]}")`)
+  }
+  
+  // Parse data rows
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r]
+    
+    if (cells.length < 2) continue
+    
+    // Skip if first cell doesn't look like a position
+    const firstCell = cells[0] || ''
+    if (!firstCell.match(/^\d+$/)) {
+      console.log(`[PARSE STANDINGS] Skipping row ${r}: "${firstCell}" doesn't look like position`)
+      continue
+    }
+    
+    const name = cells[nameCol] || ''
+    if (name.length < 2) {
+      console.log(`[PARSE STANDINGS] Skipping row ${r}: name too short: "${name}"`)
+      continue
+    }
+    
+    const entry = {
+      position: cells[posCol] || '',
+      name: name,
+      sailNo: cells[nameCol + 1] || '',
+      skipper: cells[nameCol + 2] || '',
+      points: cells[cells.length - 2] || '',
+      total: cells[cells.length - 1] || ''
+    }
+    
+    console.log(`[PARSE STANDINGS] Row ${r}: "${entry.name}" (pos ${entry.position})`)
+    results.push(entry)
+  }
+  
+  console.log(`[PARSE STANDINGS] Parsed ${results.length} standings`)
   return results
 }
 
-function parseRaceForClass(htmlRaw) {
-  const tables = allTables(htmlRaw)
-  if (!tables.length) return []
+function parseRaceResults(html) {
+  console.log(`[PARSE RACE] Starting race parse...`)
+  const tables = extractAllTables(html)
   
-  // Find race results table (has finish/corrected time columns)
-  const raceTable = tables.find(t => {
-    const rows = tableRows(t.html)
-    if (!rows.length) return false
-    const headers = rows[0].map(x => x.toLowerCase())
-    const hasPos = headers.some(h => /^(pos|#|position)$/.test(h))
-    const hasTime = headers.some(h => /(finish|corrected|elapsed|time)/.test(h))
-    return hasPos && hasTime
-  }) || tables[0]
+  if (tables.length === 0) return []
   
-  return parseRaceRows(raceTable.html)
+  // Try each table
+  for (let i = 0; i < tables.length; i++) {
+    const rows = extractTableData(tables[i])
+    if (rows.length < 2) continue
+    
+    const headers = rows[0].map(h => h.toLowerCase())
+    const hasTime = headers.some(h => h.includes('finish') || h.includes('elapsed') || h.includes('corrected') || h.includes('time'))
+    
+    if (hasTime || i === 0) {
+      const raceData = parseRaceTable(rows)
+      if (raceData.length > 0) return raceData
+    }
+  }
+  
+  return []
 }
 
-function parseRaceChooseClass(htmlRaw, wantClass) {
-  const html = decodeEntities(htmlRaw)
+function parseRaceResultsForClass(html, wantClass) {
+  console.log(`[PARSE RACE CLASS] Looking for class ${wantClass}...`)
   
   if (!wantClass) {
-    const tables = allTables(html)
-    const raceTable = tables.find(t => {
-      const rows = tableRows(t.html)
-      if (!rows.length) return false
-      const headers = rows[0].map(x => x.toLowerCase())
-      const hasPos = headers.some(h => /^(pos|#|position)$/.test(h))
-      const hasTime = headers.some(h => /(finish|corrected|elapsed)/.test(h))
-      return hasPos && hasTime
-    }) || tables[0]
-    return raceTable ? parseRaceRows(raceTable.html) : []
+    return parseRaceResults(html)
   }
   
-  // Find class-specific section
-  const anchorRe = new RegExp(`action=series[^"'>]*classid=${escapeRegex(wantClass)}`, 'i')
-  const pos = html.search(anchorRe)
-  if (pos < 0) return []
+  // Find class section in HTML
+  const classIndex = html.toLowerCase().indexOf(wantClass.toLowerCase())
+  if (classIndex === -1) {
+    console.log(`[PARSE RACE CLASS] Class ${wantClass} not found, using first table`)
+    return parseRaceResults(html)
+  }
   
-  const tableRe = new RegExp("<table[\\s\\S]*?<\\/table>", "gi")
-  tableRe.lastIndex = pos
-  const m = tableRe.exec(html)
-  if (!m) return []
+  // Get HTML after class mention
+  const relevantHtml = html.substring(classIndex)
+  const tables = extractAllTables(relevantHtml)
   
-  return parseRaceRows(m[0])
+  if (tables.length === 0) return []
+  
+  // Use first table after class mention
+  const rows = extractTableData(tables[0])
+  return parseRaceTable(rows)
 }
 
-function parseRaceRows(tableHtml) {
-  const rows = tableRows(tableHtml)
+function parseRaceTable(rows) {
   if (rows.length < 2) return []
   
-  const headers = rows[0].map(x => x.trim())
-  
-  const posCol = findColumnByName(headers, ['pos', 'position', '#']) || 0
-  const boatCol = findBoatNameColumn(headers, rows)
-  const finishCol = findColumnByName(headers, ['finish', 'finish time'])
-  const elapsedCol = findColumnByName(headers, ['elapsed', 'elapsed time'])
-  const correctedCol = findColumnByName(headers, ['corrected', 'corrected time'])
-  
-  if (boatCol === -1) return []
-  
   const results = []
+  const headers = rows[0]
+  
+  // Find name column (same logic as standings)
+  let nameCol = 1
+  if (rows.length > 1) {
+    let maxTextLength = 0
+    for (let col = 0; col < Math.min(headers.length, 6); col++) {
+      const sampleText = rows[1][col] || ''
+      if (sampleText.length > maxTextLength && isNaN(parseFloat(sampleText)) && sampleText.length > 2) {
+        nameCol = col
+        maxTextLength = sampleText.length
+      }
+    }
+  }
+  
   for (let r = 1; r < rows.length; r++) {
     const cells = rows[r]
     
-    if (!cells[posCol] || isNaN(parseInt(cells[posCol], 10))) continue
+    if (cells.length < 2) continue
+    if (!cells[0].match(/^\d+$/)) continue
+    
+    const name = cells[nameCol] || ''
+    if (name.length < 2) continue
     
     const entry = {
-      position: safeGet(cells, posCol),
-      name: safeGet(cells, boatCol),
-      finishTime: safeGet(cells, finishCol >= 0 ? finishCol : Math.max(3, boatCol + 1)),
-      elapsed: safeGet(cells, elapsedCol >= 0 ? elapsedCol : Math.max(4, boatCol + 2)),
-      correctedTime: safeGet(cells, correctedCol >= 0 ? correctedCol : Math.max(5, boatCol + 3))
+      position: cells[0] || '',
+      name: name,
+      finishTime: cells[Math.min(nameCol + 2, cells.length - 3)] || '',
+      elapsed: cells[Math.min(nameCol + 3, cells.length - 2)] || '',
+      correctedTime: cells[Math.min(nameCol + 4, cells.length - 1)] || '',
+      deltaToFirst: '–'
     }
     
-    if (entry.name && entry.name.length > 1) {
-      results.push(entry)
-    }
+    results.push(entry)
   }
   
-  // Calculate deltas
-  if (results.length && results[0].correctedTime) {
-    const firstTime = results[0].correctedTime
-    for (const r of results) {
-      r.deltaToFirst = (firstTime && r.correctedTime) ? 
-        mmssDelta(firstTime, r.correctedTime) : '–'
-    }
-  }
-  
+  console.log(`[PARSE RACE] Parsed ${results.length} race results`)
   return results
 }
 
-/* ---------- Classes & Races ---------- */
-function parseClasses(htmlRaw) {
-  const html = decodeEntities(htmlRaw)
+/* ---------- Classes & Races (Same as before) ---------- */
+function parseClasses(html) {
   const out = []
+  const classRegex = /action=series[^"'>]*classid=([^"'>&\s]+)/gi
+  let match
   
-  // Find class links
-  const reA = new RegExp(
-    "href=([\"'])[^\"']*action=series[^\"']*?(?:eventid=[^\"'&>]+&[^\"'>]*classid=([^\"'&>]+)|classid=([^\"'&>]+)[^\"'>]*&[^\"'>]*eventid=[^\"'&>]+)[^\"']*\\1[^>]*>([\\s\\S]*?)<\\/a>",
-    "gi"
-  )
-  let m
-  while ((m = reA.exec(html)) !== null) {
-    const id = (m[2] || m[3] || '').trim()
-    if (id && !out.some(x => x.id === id)) out.push({ id, label: id })
-  }
-  
-  // Fallback: URL-only detection
-  if (!out.length) {
-    const reU = new RegExp("action=series[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*classid=([^\\s\"'>&]+)", "gi")
-    while ((m = reU.exec(html)) !== null) {
-      const id = (m[1] || '').trim()
-      if (id && !out.some(x => x.id === id)) out.push({ id, label: id })
+  while ((match = classRegex.exec(html)) !== null) {
+    const id = match[1].trim()
+    if (id && !out.some(x => x.id === id)) {
+      out.push({ id, label: id })
     }
   }
   
   return out
 }
 
-function parseRacesAnyClass(htmlRaw) {
-  const html = decodeEntities(htmlRaw)
+function parseRacesAnyClass(html) {
   const out = []
-  const re = new RegExp("action=race[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*raceid=([^\\s\"'>&]+)", "gi")
-  let m
-  while ((m = re.exec(html)) !== null) {
-    const id = (m[1] || '').trim()
-    if (id && !out.some(x => x.id === id)) out.push({ id, label: `RACE ${id}` })
+  const raceRegex = /action=race[^"'>]*raceid=([^"'>&\s]+)/gi
+  let match
+  
+  while ((match = raceRegex.exec(html)) !== null) {
+    const id = match[1].trim()
+    if (id && !out.some(x => x.id === id)) {
+      out.push({ id, label: `RACE ${id}` })
+    }
   }
+  
   return out.sort((a,b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true, sensitivity:'base' }))
 }
 
-function parseRacesForClass(htmlRaw, wantClass) {
-  const html = decodeEntities(htmlRaw)
+function parseRacesForClass(html, wantClass) {
+  const classIndex = html.indexOf(wantClass)
+  if (classIndex === -1) return []
   
-  const anchorRe = new RegExp(`action=series[^"'>]*classid=${escapeRegex(wantClass)}`, 'i')
-  const start = html.search(anchorRe)
-  if (start < 0) return []
-  
-  const nextRe = new RegExp("action=series[^\"'>]*classid=([A-Za-z0-9]+)", "gi")
-  nextRe.lastIndex = start + 1
-  let end = html.length
-  const next = nextRe.exec(html)
-  if (next) end = next.index
-  
-  const slice = html.slice(start, end)
-  const raceRe = new RegExp("action=race[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*raceid=([^\\s\"'>&]+)", "gi")
+  const afterClass = html.substring(classIndex, classIndex + 5000) // Look in next 5000 chars
   const out = []
-  let m
-  while ((m = raceRe.exec(slice)) !== null) {
-    const id = (m[1] || '').trim()
-    if (id && !out.some(x => x.id === id)) out.push({ id, label: `RACE ${id}` })
+  const raceRegex = /action=race[^"'>]*raceid=([^"'>&\s]+)/gi
+  let match
+  
+  while ((match = raceRegex.exec(afterClass)) !== null) {
+    const id = match[1].trim()
+    if (id && !out.some(x => x.id === id)) {
+      out.push({ id, label: `RACE ${id}` })
+    }
   }
+  
   return out.sort((a,b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true, sensitivity:'base' }))
-}
-
-function escapeRegex(s) { 
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') 
 }
 
 async function autoFirstClass(eventId) {
   const html = await fetchText(indexUrl(eventId))
-  const cls = parseClasses(html)
-  return cls[0]?.id || null
+  const classes = parseClasses(html)
+  return classes[0]?.id || null
 }
