@@ -1,5 +1,6 @@
 // api/results-orc.js
-export const runtime = 'nodejs'  // force Node runtime on Vercel
+// Force Serverless Node runtime on Vercel (avoid Edge regex quirks)
+export const runtime = 'nodejs'
 
 export default async function handler(req, res) {
   // CORS
@@ -23,6 +24,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ success:false, message:'Missing eventId' })
     }
 
+    // ---- debug: fetch raw HTML (no parsing)
     if (type === 'debug') {
       const html = await fetchText(indexUrl(eventId))
       return res.status(200).json({
@@ -55,19 +57,22 @@ export default async function handler(req, res) {
 
     if (type === 'race') {
       if (!raceId) return res.status(400).json({ success:false, message:'Missing raceId' })
-      const html = await fetchText(raceUrl(eventId, raceId))
+      const cls = classId || (await autoFirstClass(eventId)) // <-- ensure class context
+      if (!cls) return ok(res, 'race', [], { eventId, classId: null, raceId })
+      const html = await fetchText(raceUrl(eventId, cls, raceId)) // <-- include classId
       const rows = safeParse(parseRace, html)
-      return ok(res, 'race', rows, { eventId, raceId })
+      return ok(res, 'race', rows, { eventId, classId: cls, raceId })
     }
 
     if (type === 'lastRace') {
       const htmlIdx = await fetchText(indexUrl(eventId))
       const races = safeParse(parseRaces, htmlIdx)
       const last = races[races.length - 1]
-      if (!last) return ok(res, 'race', [], { eventId, raceId: null })
-      const htmlRace = await fetchText(raceUrl(eventId, last.id))
+      const cls = classId || (await autoFirstClass(eventId))
+      if (!last || !cls) return ok(res, 'race', [], { eventId, classId: cls || null, raceId: null })
+      const htmlRace = await fetchText(raceUrl(eventId, cls, last.id))
       const rows = safeParse(parseRace, htmlRace)
-      return ok(res, 'race', rows, { eventId, raceId: last.id, raceLabel: last.label })
+      return ok(res, 'race', rows, { eventId, classId: cls, raceId: last.id, raceLabel: last.label })
     }
 
     return res.status(400).json({ success:false, message:'Unknown type' })
@@ -78,9 +83,9 @@ export default async function handler(req, res) {
 }
 
 /* ---------- URLs ---------- */
-const indexUrl  = (eventId)      => `https://data.orc.org/public/WEV.dll?action=index&eventid=${encodeURIComponent(eventId)}`
-const seriesUrl = (eventId, cls) => `https://data.orc.org/public/WEV.dll?action=series&eventid=${encodeURIComponent(eventId)}&classid=${encodeURIComponent(cls)}`
-const raceUrl   = (eventId, r)   => `https://data.orc.org/public/WEV.dll?action=race&eventid=${encodeURIComponent(eventId)}&raceid=${encodeURIComponent(r)}`
+const indexUrl  = (eventId)           => `https://data.orc.org/public/WEV.dll?action=index&eventid=${encodeURIComponent(eventId)}`
+const seriesUrl = (eventId, cls)      => `https://data.orc.org/public/WEV.dll?action=series&eventid=${encodeURIComponent(eventId)}&classid=${encodeURIComponent(cls)}`
+const raceUrl   = (eventId, cls, rId) => `https://data.orc.org/public/WEV.dll?action=race&eventid=${encodeURIComponent(eventId)}&classid=${encodeURIComponent(cls)}&raceid=${encodeURIComponent(rId)}`
 
 /* ---------- HTTP ---------- */
 async function fetchText(url) {
@@ -107,10 +112,13 @@ function safeParse(fn, html) {
 
 /* ---------- Utils ---------- */
 function decodeEntities(s) {
-  return String(s || '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  return String(s || '')
+    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 }
 function cleanup(s) {
-  return String(s || '')
+  // decode first, then strip tags/spaces
+  return decodeEntities(String(s || ''))
     .replace(new RegExp("<[^>]+>", "g"), " ")
     .replace(/\u00A0/g, " ")
     .replace(/\s+/g, " ")
@@ -162,12 +170,11 @@ function extractLargestTableRows(html) {
   return rows
 }
 
-/* ---------- Parsers (robust to quotes, &amp;, param order) ---------- */
+/* ---------- Parsers ---------- */
 function parseClasses(htmlRaw) {
   const html = decodeEntities(htmlRaw)
-
   const out = []
-  // 1) anchor form, double or single quotes
+  // anchor form, supports single/double quotes and any param order
   const reA = new RegExp(
     "href=([\"'])[^\"']*action=series[^\"']*?(?:eventid=[^\"'&>]+&[^\"'>]*classid=([^\"'&>]+)|classid=([^\"'&>]+)[^\"'>]*&[^\"'>]*eventid=[^\"'&>]+)[^\"']*\\1[^>]*>([\\s\\S]*?)<\\/a>",
     "gi"
@@ -175,11 +182,10 @@ function parseClasses(htmlRaw) {
   let m
   while ((m = reA.exec(html)) !== null) {
     const id = (m[2] || m[3] || '').trim()
-    const label = cleanup(m[4])
-    if (id && !out.some(x => x.id === id)) out.push({ id, label: label || id })
+    const label = cleanup(m[4]) || id
+    if (id && !out.some(x => x.id === id)) out.push({ id, label })
   }
-
-  // 2) URL-only fallback (no reliance on <a> inner text)
+  // URL-only fallback
   if (!out.length) {
     const reU = new RegExp("action=series[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*classid=([^\\s\"'>&]+)", "gi")
     while ((m = reU.exec(html)) !== null) {
@@ -192,9 +198,7 @@ function parseClasses(htmlRaw) {
 
 function parseRaces(htmlRaw) {
   const html = decodeEntities(htmlRaw)
-
   const out = []
-  // 1) anchor form
   const reA = new RegExp(
     "href=([\"'])[^\"']*action=race[^\"']*?(?:eventid=[^\"'&>]+&[^\"'>]*raceid=([^\"'&>]+)|raceid=([^\"'&>]+)[^\"'>]*&[^\"'>]*eventid=[^\"'&>]+)[^\"']*\\1[^>]*>([\\s\\S]*?)<\\/a>",
     "gi"
@@ -202,11 +206,9 @@ function parseRaces(htmlRaw) {
   let m
   while ((m = reA.exec(html)) !== null) {
     const id = (m[2] || m[3] || '').trim()
-    const label = cleanup(m[4])
-    if (id && !out.some(x => x.id === id)) out.push({ id, label: label || `Race ${id}` })
+    const label = cleanup(m[4]) || `Race ${id}`
+    if (id && !out.some(x => x.id === id)) out.push({ id, label })
   }
-
-  // 2) URL-only fallback
   if (!out.length) {
     const reU = new RegExp("action=race[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*raceid=([^\\s\"'>&]+)", "gi")
     while ((m = reU.exec(html)) !== null) {
@@ -214,8 +216,6 @@ function parseRaces(htmlRaw) {
       if (id && !out.some(x => x.id === id)) out.push({ id, label: `Race ${id}` })
     }
   }
-
-  // numeric-ish sort
   return out.sort((a,b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true, sensitivity:'base' }))
 }
 
