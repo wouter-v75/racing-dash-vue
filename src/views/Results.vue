@@ -413,6 +413,48 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+.btn.debug {
+  background: rgba(255,193,7,.2);
+  border-color: #ffc107;
+}
+
+.btn.close-debug {
+  background: rgba(255,67,67,.2);
+  border-color: #ff4343;
+  margin-top: 15px;
+}
+
+.debug-card {
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,193,7,.3);
+}
+
+.debug-content {
+  color: #fff;
+}
+
+.debug-section {
+  margin-bottom: 20px;
+}
+
+.debug-section h4 {
+  color: #ffc107;
+  margin: 0 0 10px 0;
+  font-size: 1rem;
+}
+
+.html-preview {
+  background: rgba(0,0,0,.3);
+  padding: 15px;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid rgba(255,255,255,.2);
+}
+
 .updates-log {
   background: rgba(0,0,0,.2);
   border-radius: 12px;
