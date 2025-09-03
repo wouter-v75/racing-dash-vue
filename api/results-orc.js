@@ -134,7 +134,8 @@ function parseSimpleOverall(html, debug = false) {
       return results
     }
 
-    for (const row of matches) {
+    for (let i = 0; i < matches.length; i++) {
+      const row = matches[i]
       const cellRegex = /<td[^>]*>(.*?)<\/td>/gis
       const cells = []
       let cellMatch
@@ -153,11 +154,7 @@ function parseSimpleOverall(html, debug = false) {
         cells.push(cellText)
       }
       
-      if (debug) {
-        console.log(`Row cells (${cells.length}):`, cells)
-      }
-      
-      // Parse based on actual column count
+      // Parse based on actual column count (13 columns total based on image)
       if (cells.length >= 6) {
         const position = cells[0] || ''
         
@@ -165,18 +162,26 @@ function parseSimpleOverall(html, debug = false) {
         if (position && !isNaN(parseInt(position, 10))) {
           const result = {
             position: position,
-            name: cells[2] || '',      // Boat name 
-            sailNo: cells[3] || '',    // Sail number
-            skipper: cells[5] || '',   // Skipper name
-            points: cells[4] || '',    // Currently showing rating
-            total: cells[4] || '',     // Currently showing rating
-            debug_allCells: debug ? cells : undefined
+            name: cells[2] || '',      // Column 2: Yacht Name ✓
+            sailNo: cells[3] || '',    // Column 3: Sail No ✓  
+            skipper: cells[5] || '',   // Column 5: Owner ✓
+            
+            // Based on table image: Points should be in LAST column (Total)
+            points: cells[cells.length - 1] || '', // Last column = Total points
+            total: cells[cells.length - 1] || '',  // Last column = Total points
+            
+            // Add race scores if available (columns 8-11)
+            r1: cells.length > 8 ? cells[8] : '',
+            r2: cells.length > 9 ? cells[9] : '',
+            r3: cells.length > 10 ? cells[10] : '',
+            r4: cells.length > 11 ? cells[11] : ''
           }
           
-          // If we have more columns, try to find actual points/total
-          if (cells.length > 6) {
-            result.points = cells[6] || cells[4] // Try column 6 for points
-            result.total = cells[7] || cells[6] || cells[4] // Try column 7 then 6 for total
+          // Always include debug info when in debug mode
+          if (debug) {
+            result.debug_allCells = cells
+            result.debug_cellCount = cells.length
+            result.debug_lastCell = cells[cells.length - 1]
           }
           
           results.push(result)
