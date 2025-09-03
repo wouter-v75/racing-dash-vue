@@ -169,21 +169,59 @@ function clearData() {
 async function testAPI() {
   try {
     console.log('Testing API call...')
-    const response = await fetch('/api/orc-proxy?type=series&eventId=xolfq&classId=M2&debug=true')
-    console.log('API response status:', response.status)
     
-    if (response.ok) {
-      const result = await response.json()
+    // Test with debug=true to get raw HTML
+    console.log('Testing with debug mode to see raw HTML...')
+    const testResponse = await fetch('/api/orc-proxy?type=series&eventId=xolfq&classId=M2&debug=true')
+    console.log('Debug API response status:', testResponse.status)
+    
+    if (testResponse.ok) {
+      const result = await testResponse.json()
       apiResult.value = result
-      console.log('API result:', result)
+      console.log('✅ API working! Debug result:', result)
+      
+      // Show what HTML we're getting
+      if (result.html) {
+        console.log('📄 HTML length:', result.html.length)
+        console.log('📄 HTML preview (first 1000 chars):', result.html.substring(0, 1000))
+        
+        // Look for NORTHSTAR specifically
+        const northstarLines = result.html.split('\n').filter(line => 
+          line.toUpperCase().includes('NORTHSTAR')
+        )
+        console.log('🎯 Lines containing NORTHSTAR:', northstarLines)
+        
+        // Look for table structure
+        const pipeLines = result.html.split('\n').filter(line => 
+          line.includes('|') && line.split('|').length > 5
+        )
+        console.log('📊 Lines with pipe separators (table data):', pipeLines.slice(0, 5))
+        
+        // Look for common header patterns
+        const headerPatterns = ['Rank', 'Position', 'Yacht', 'Name', 'Total', 'Points']
+        headerPatterns.forEach(pattern => {
+          const found = result.html.split('\n').filter(line => 
+            line.toUpperCase().includes(pattern.toUpperCase())
+          )
+          if (found.length > 0) {
+            console.log(`📋 Lines with "${pattern}":`, found.slice(0, 3))
+          }
+        })
+      }
     } else {
-      const errorText = await response.text()
-      console.log('API error:', response.status, errorText)
-      apiResult.value = { error: `${response.status}: ${errorText}` }
+      const errorText = await testResponse.text()
+      console.log('❌ API error:', testResponse.status, errorText)
+      apiResult.value = { 
+        error: `${testResponse.status}: ${errorText}`,
+        status: testResponse.status
+      }
     }
   } catch (err) {
-    console.log('API test failed:', err)
-    apiResult.value = { error: err.message }
+    console.log('❌ API test completely failed:', err)
+    apiResult.value = { 
+      error: err.message,
+      type: 'Network/Connection Error'
+    }
   }
 }
 </script>
