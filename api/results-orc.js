@@ -209,14 +209,12 @@ export default async function handler(req, res) {
       })
     }
 
-    // Handle debug-series mode - debug specific series page
-    if (type === 'debug-series') {
-      if (!classId) return res.status(400).json({ success: false, message: 'Missing classId for debug-series' })
+    // Handle debug-parse mode - debug the actual parsing
+    if (type === 'debug-parse') {
+      if (!classId) return res.status(400).json({ success: false, message: 'Missing classId for debug-parse' })
       
-      const debugUrl = `https://data.orc.org/public/WEV.dll?action=series&eventid=${eventId}&classid=${classId}`
-      console.log('Fetching debug SERIES HTML from:', debugUrl)
-      
-      const response = await fetch(debugUrl, {
+      const seriesUrl = `https://data.orc.org/public/WEV.dll?action=series&eventid=${eventId}&classid=${classId}`
+      const response = await fetch(seriesUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; racingdash-proxy/1.0)',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
@@ -228,29 +226,55 @@ export default async function handler(req, res) {
       }
       
       const html = await response.text()
-      console.log('Debug SERIES HTML length:', html.length)
       
-      // Also try to extract tables for analysis
-      const tables = allTables(html)
-      const tableInfo = tables.map((t, i) => ({
-        index: i,
-        length: t.html.length,
-        preview: t.html.slice(0, 200)
-      }))
+      // Debug parsing step by step
+      const debug = {
+        htmlLength: html.length,
+        hasNorthstar: html.includes('NORTHSTAR'),
+        hasDataClass: html.includes('class="data"'),
+        htmlPreview: html.slice(0, 1000),
+        patterns: {}
+      }
+      
+      // Test regex patterns
+      const pattern1 = /<tr[^>]*class="data"[^>]*>/gi
+      const matches1 = html.match(pattern1)
+      debug.patterns.dataClassMatches = matches1 ? matches1.length : 0
+      
+      // Look for NORTHSTAR row specifically
+      const northstarRowRegex = /<tr[^>]*>[\s\S]*?NORTHSTAR[\s\S]*?<\/tr>/gis
+      const northstarMatch = html.match(northstarRowRegex)
+      debug.patterns.northstarRows = northstarMatch ? northstarMatch.length : 0
+      
+      if (northstarMatch) {
+        debug.northstarRowHtml = northstarMatch[0]
+        
+        // Extract cells from NORTHSTAR row
+        const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gis
+        const cells = []
+        let cellMatch
+        
+        while ((cellMatch = cellRegex.exec(northstarMatch[0])) !== null) {
+          let cellContent = cellMatch[1]
+          cellContent = cellContent
+            .replace(/<span[^>]*>/g, '')
+            .replace(/<\/span>/g, '')
+            .replace(/<br\s*\/?>/gi, ' ')
+            .replace(/█/g, '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+          cells.push(cellContent)
+        }
+        
+        debug.northstarCells = cells
+      }
       
       return res.status(200).json({
         success: true,
-        resultType: 'debug-series',
-        preview: html.slice(0, 2000), // More chars for series debug
-        tables: tableInfo,
-        meta: {
-          eventId,
-          classId,
-          url: debugUrl,
-          htmlLength: html.length,
-          tableCount: tables.length,
-          lastUpdated: new Date().toISOString()
-        }
+        resultType: 'debug-parse',
+        debug,
+        meta: { eventId, classId, url: seriesUrl, lastUpdated: new Date().toISOString() }
       })
     }
 
