@@ -173,177 +173,41 @@ function formatTime(date) {
   })
 }
 
-// ORC Parsing Functions
-function cleanup(s) {
-  return String(s || '')
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[\u00A0\u2007\u202F]/g, " ")
-    .replace(/█/g, '')
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
-function extractPoints(str) {
-  if (!str) return null
-  const cleaned = cleanup(str)
-  
-  if (/^(DNF|DNS|DSQ|DNC|RET|RAF|BFD|UFD|SCP|ZFP)$/i.test(cleaned)) {
-    return cleaned.toUpperCase()
-  }
-  
-  const match = cleaned.match(/(\d+(?:\.\d+)?)/)
-  return match ? parseFloat(match[1]) : null
-}
-
-function parseORCSeriesData(html) {
-  const lines = html.split('\n').map(line => line.trim()).filter(line => line)
-  
-  let rawDataLines = []
-  let inTable = false
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    
-    if (/^[\|\-\s]+$/.test(line)) continue
-    
-    if (line.includes('Rank') && line.includes('Yacht Name') && line.includes('Total')) {
-      inTable = true
-      continue
-    }
-    
-    if (inTable) {
-      if (line.includes('[') && line.includes(']') && line.match(/\d{2}\/\d{2}\/\d{4}/)) break
-      if (line.includes('|')) {
-        rawDataLines.push(line)
-      }
-    }
-  }
-  
-  if (!rawDataLines.length) return []
-  
-  // Reconstruct complete rows
-  const completeRows = []
-  let currentRow = null
-  
-  for (const line of rawDataLines) {
-    const cells = line.split('|').map(cell => cleanup(cell))
-    
-    if (cells.length > 8 && /^\d+$/.test(cells[0])) {
-      if (currentRow) completeRows.push(currentRow)
-      currentRow = [...cells]
-    } else if (currentRow && cells.length > 0) {
-      const firstNonEmpty = cells.find(cell => cell && cell.trim())
-      if (firstNonEmpty && /^\d+(\.\d+)?$/.test(firstNonEmpty)) {
-        currentRow.push(`TOTAL:${firstNonEmpty}`)
-      }
-    }
-  }
-  
-  if (currentRow) completeRows.push(currentRow)
-  
-  return completeRows.map(cells => {
-    let totalScore = null
-    const totalCell = cells.find(cell => cell.startsWith('TOTAL:'))
-    if (totalCell) {
-      totalScore = extractPoints(totalCell.replace('TOTAL:', ''))
-    } else {
-      for (let i = 12; i < cells.length; i++) {
-        const points = extractPoints(cells[i])
-        if (points !== null && typeof points === 'number' && points > 0) {
-          totalScore = points
-          break
-        }
-      }
-    }
-    
-    const result = {
-      position: cells[0] || '',
-      nation: cells[1] || '',
-      name: cells[2] || '',
-      sailNo: cells[3] || '',
-      type: cells[4] || '',
-      owner: cells[5] || '',
-      club: cells[6] || '',
-      class: cells[7] || '',
-      total: totalScore || '',
-      races: {}
-    }
-    
-    // Extract race results (R1-R4)
-    const raceColumns = [8, 9, 10, 11]
-    raceColumns.forEach((colIndex, raceIndex) => {
-      const raceNum = raceIndex + 1
-      if (cells[colIndex]) {
-        const racePoints = extractPoints(cells[colIndex])
-        if (racePoints !== null) {
-          result.races[`R${raceNum}`] = racePoints
-        }
-      }
-    })
-    
-    return result
-  })
-}
-
-function parseRaceIds(html) {
-  // Extract all race IDs from the index page for our class
-  const raceIds = []
-  
-  // Look for race links in the HTML
-  const raceRegex = /action=race[^"'>]*raceid=([^"'&>\s]+)/gi
-  let match
-  
-  while ((match = raceRegex.exec(html)) !== null) {
-    const raceId = match[1].trim()
-    if (raceId && !raceIds.includes(raceId)) {
-      raceIds.push(raceId)
-    }
-  }
-  
-  return raceIds.sort((a, b) => {
-    // Try to sort numerically if possible
-    const numA = parseInt(a, 10)
-    const numB = parseInt(b, 10)
-    if (!isNaN(numA) && !isNaN(numB)) return numA - numB
-    return a.localeCompare(b)
-  })
-}
-
 // Data Fetching
 async function fetchORCData() {
-  const corsProxy = 'https://api.allorigins.win/get?url='
-  
   try {
-    // Fetch series results
-    const seriesUrl = `https://data.orc.org/public/WEV.dll?action=series&eventid=${EVENT_ID}&classid=${CLASS_ID}`
-    const seriesResponse = await fetch(corsProxy + encodeURIComponent(seriesUrl))
+    // Use our Vercel serverless function (no CORS issues)
+    const seriesResponse = await fetch(`/api/orc-proxy?type=series&eventId=${EVENT_ID}&classId=${CLASS_ID}`)
     
     if (!seriesResponse.ok) {
-      throw new Error(`Series fetch failed: ${seriesResponse.status}`)
+      throw new Error(`Series proxy failed: ${seriesResponse.status}`)
     }
     
-    const seriesData = await seriesResponse.json()
-    const seriesHtml = seriesData.contents
+    const seriesResult = await seriesResponse.json()
+    if (!seriesResult.success) {
+      throw new Error(seriesResult.message || 'Series fetch failed')
+    }
     
-    // Fetch index page for race IDs
-    const indexUrl = `https://data.orc.org/public/WEV.dll?action=index&eventid=${EVENT_ID}`
-    const indexResponse = await fetch(corsProxy + encodeURIComponent(indexUrl))
+    // Fetch index page for race detection
+    const indexResponse = await fetch(`/api/orc-proxy?type=index&eventId=${EVENT_ID}`)
     
     if (!indexResponse.ok) {
-      throw new Error(`Index fetch failed: ${indexResponse.status}`)
+      throw new Error(`Index proxy failed: ${indexResponse.status}`)
     }
     
-    const indexData = await indexResponse.json()
-    const indexHtml = indexData.contents
+    const indexResult = await indexResponse.json()
+    if (!indexResult.success) {
+      throw new Error(indexResult.message || 'Index fetch failed')
+    }
     
     return {
-      seriesHtml,
-      indexHtml,
+      seriesData: seriesResult.data,
+      indexData: indexResult.data,
       timestamp: new Date()
     }
     
   } catch (err) {
-    console.error('Fetch failed:', err)
+    console.error('Fetch via proxy failed:', err)
     throw err
   }
 }
@@ -353,30 +217,28 @@ async function refreshData() {
   error.value = ''
   
   try {
-    console.log('Fetching live ORC data...')
+    console.log('Fetching live ORC data via proxy...')
     
-    const { seriesHtml, indexHtml, timestamp } = await fetchORCData()
+    const { seriesData: newSeriesData, indexData, timestamp } = await fetchORCData()
     
-    // Parse series results
-    const parsed = parseORCSeriesData(seriesHtml)
-    
-    if (parsed.length > 0) {
+    // newSeriesData is already parsed by the serverless function
+    if (newSeriesData && newSeriesData.length > 0) {
       const oldCount = seriesData.value.length
-      seriesData.value = parsed
+      seriesData.value = newSeriesData
       lastUpdate.value = timestamp
       
-      if (oldCount > 0 && parsed.length !== oldCount) {
-        addUpdate(`Series updated: ${parsed.length} boats (was ${oldCount})`, 'update')
+      if (oldCount > 0 && newSeriesData.length !== oldCount) {
+        addUpdate(`Series updated: ${newSeriesData.length} boats (was ${oldCount})`, 'update')
       }
       
-      // Parse available races
-      const raceIds = parseRaceIds(indexHtml)
+      // indexData.races contains available race IDs
+      const raceIds = indexData.races || []
       const newRaces = raceIds.filter(id => !knownRaceIds.value.has(id))
       
       // Update available races with race number mapping
       availableRaces.value = raceIds.map((id, index) => ({
         id,
-        raceNumber: index + 1, // Race number for the class (1, 2, 3, 4...)
+        raceNumber: index + 1, // Race number for class (1, 2, 3, 4...)
         isNew: !knownRaceIds.value.has(id)
       }))
       
@@ -389,7 +251,12 @@ async function refreshData() {
         })
       }
       
-      addUpdate(`✅ Data updated successfully - ${parsed.length} boats`, 'success')
+      const northstar = newSeriesData.find(boat => boat.name.toUpperCase().includes('NORTHSTAR'))
+      if (northstar) {
+        addUpdate(`✅ NORTHSTAR: P${northstar.position} (${northstar.total} pts)`, 'success')
+      } else {
+        addUpdate(`✅ Data updated - ${newSeriesData.length} boats`, 'success')
+      }
       
     } else {
       throw new Error('No boats found in series results')
@@ -399,6 +266,25 @@ async function refreshData() {
     console.error('Refresh failed:', err)
     error.value = `Update failed: ${err.message}`
     addUpdate(`❌ Update failed: ${err.message}`, 'error')
+    
+    // Fallback to sample data for testing
+    if (seriesData.value.length === 0) {
+      seriesData.value = [
+        {
+          position: "3",
+          nation: "GBR",
+          name: "NORTHSTAR OF LONDON",
+          sailNo: "GBR72X",
+          type: "IRC 72",
+          owner: "Peter Dubens",
+          club: "YC Costa Smeralda / Royal Thames YC",
+          class: "M2",
+          total: 12,
+          races: { R1: 4, R2: 2, R3: 1, R4: "5 RET" }
+        }
+      ]
+      addUpdate('📋 Using fallback data', 'info')
+    }
   } finally {
     loading.value = false
   }
