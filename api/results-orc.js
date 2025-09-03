@@ -1,4 +1,28 @@
-// Ultra-simple parser - just find NORTHSTAR directly
+// Brutally simple parser - extract everything and see what happens
+function parseSimpleOverallResults(html) {
+  const results = []
+  
+  try {
+    // Just find any row with NORTHSTAR and extract its cells
+    const northstarIndex = html.indexOf('NORTHSTAR')
+    if (northstarIndex === -1) return results
+    
+    // Find the start of the row containing NORTHSTAR
+    const rowStart = html.lastIndexOf('<tr', northstarIndex)
+    const rowEnd = html.indexOf('</tr>', northstarIndex) + 5
+    
+    if (rowStart === -1 || rowEnd === -1) return results
+    
+    const rowHtml = html.slice(rowStart, rowEnd)
+    
+    // Extract all td contents using simple regex
+    const cellRegex = /<td[^>]*>(.*?)<\/td>/gis
+    const cells = []
+    let match
+    
+    while ((match = cellRegex.exec(rowHtml)) !== null) {
+      let content = match[1]
+        .replace(/<[^>]+// Ultra-simple parser - just find NORTHSTAR directly
 function parseSimpleOverallResults(html) {
   console.log('=== ULTRA SIMPLE DEBUG ===')
   console.log('HTML length:', html.length)
@@ -209,7 +233,7 @@ export default async function handler(req, res) {
       })
     }
 
-    // Handle debug-parse mode - debug the actual parsing
+    // Handle debug-parse mode - debug the actual parsing and return results
     if (type === 'debug-parse') {
       if (!classId) return res.status(400).json({ success: false, message: 'Missing classId for debug-parse' })
       
@@ -232,31 +256,31 @@ export default async function handler(req, res) {
         htmlLength: html.length,
         hasNorthstar: html.includes('NORTHSTAR'),
         hasDataClass: html.includes('class="data"'),
-        htmlPreview: html.slice(0, 1000),
-        patterns: {}
+        patterns: {},
+        rows: [],
+        results: []
       }
       
-      // Test regex patterns
-      const pattern1 = /<tr[^>]*class="data"[^>]*>/gi
-      const matches1 = html.match(pattern1)
-      debug.patterns.dataClassMatches = matches1 ? matches1.length : 0
+      // Test basic data class pattern
+      const dataClassRegex = /<tr[^>]*class="data"[^>]*>/gi
+      const dataClassMatches = html.match(dataClassRegex)
+      debug.patterns.dataClassCount = dataClassMatches ? dataClassMatches.length : 0
       
-      // Look for NORTHSTAR row specifically
-      const northstarRowRegex = /<tr[^>]*>[\s\S]*?NORTHSTAR[\s\S]*?<\/tr>/gis
-      const northstarMatch = html.match(northstarRowRegex)
-      debug.patterns.northstarRows = northstarMatch ? northstarMatch.length : 0
+      // Try to extract full data rows
+      const fullRowRegex = /<tr[^>]*class="data"[^>]*>[\s\S]*?<\/tr>/gis
+      let rowMatch
+      let rowIndex = 0
       
-      if (northstarMatch) {
-        debug.northstarRowHtml = northstarMatch[0]
+      while ((rowMatch = fullRowRegex.exec(html)) !== null && rowIndex < 10) {
+        const rowHtml = rowMatch[0]
         
-        // Extract cells from NORTHSTAR row
+        // Extract cells from this row
         const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gis
         const cells = []
         let cellMatch
         
-        while ((cellMatch = cellRegex.exec(northstarMatch[0])) !== null) {
+        while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
           let cellContent = cellMatch[1]
-          cellContent = cellContent
             .replace(/<span[^>]*>/g, '')
             .replace(/<\/span>/g, '')
             .replace(/<br\s*\/?>/gi, ' ')
@@ -267,7 +291,36 @@ export default async function handler(req, res) {
           cells.push(cellContent)
         }
         
-        debug.northstarCells = cells
+        debug.rows.push({
+          index: rowIndex,
+          cellCount: cells.length,
+          cells: cells,
+          isValidPosition: cells[0] && !isNaN(parseInt(cells[0])),
+          containsNorthstar: (cells[2] || '').toUpperCase().includes('NORTHSTAR')
+        })
+        
+        // Create result if valid
+        if (cells.length >= 8 && cells[0] && !isNaN(parseInt(cells[0]))) {
+          const result = {
+            position: cells[0],
+            nation: cells[1] || '',
+            name: cells[2] || 'Unknown',
+            sailNo: cells[3] || '',
+            type: cells[4] || '',
+            skipper: cells[5] || '',
+            club: cells[6] || '',
+            class: cells[7] || '',
+            r1: cells[8] || '',
+            r2: cells[9] || '',
+            r3: cells[10] || '',
+            r4: cells[11] || '',
+            total: cells[12] || '',
+            points: cells[12] || ''
+          }
+          debug.results.push(result)
+        }
+        
+        rowIndex++
       }
       
       return res.status(200).json({
