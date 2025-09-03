@@ -26,15 +26,28 @@ export default async function handler(req, res) {
     if (type === 'debug-parse') {
       if (!classId) return res.status(400).json({ success: false, message: 'Missing classId for debug-parse' })
       
-      const html = await fetchText(seriesUrl(eventId, classId))
-      const debugInfo = debugParseSimpleOverall(html)
-      
-      return res.status(200).json({
-        success: true,
-        resultType: 'debug-parse',
-        debug: debugInfo,
-        meta: { eventId, classId }
-      })
+      try {
+        const html = await fetchText(seriesUrl(eventId, classId))
+        const debugInfo = debugParseSimpleOverall(html)
+        
+        return res.status(200).json({
+          success: true,
+          resultType: 'debug-parse',
+          debug: {
+            ...debugInfo,
+            // Truncate large objects to prevent serialization issues
+            parsedResults: (debugInfo.parsedResults || []).slice(0, 5),
+            dataRowsPreview: (debugInfo.dataRowsPreview || []).slice(0, 2)
+          },
+          meta: { eventId, classId }
+        })
+      } catch (debugError) {
+        return res.status(500).json({
+          success: false,
+          message: 'Debug parse failed',
+          error: debugError.message
+        })
+      }
     }
 
     // Simple debug (raw HTML preview)
