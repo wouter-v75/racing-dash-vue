@@ -341,9 +341,16 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
+  margin-bottom: 15px;
   flex-wrap: wrap;
   gap: 15px;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
 }
 
 .left h2 {
