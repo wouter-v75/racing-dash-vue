@@ -1,4 +1,152 @@
-// api/results-orc.js - Vercel serverless function to fetch ORC data (no CORS issues)
+// Ultra-simple parser - just find NORTHSTAR directly
+function parseSimpleOverallResults(html) {
+  console.log('=== ULTRA SIMPLE DEBUG ===')
+  console.log('HTML length:', html.length)
+  
+  const results = []
+  
+  try {
+    // Check if HTML contains NORTHSTAR
+    const hasNorthstar = html.includes('NORTHSTAR')
+    console.log('Contains NORTHSTAR:', hasNorthstar)
+    
+    // Check if we can find class="data"
+    const hasDataClass = html.includes('class="data"')
+    console.log('Contains class="data":', hasDataClass)
+    
+    // Test different regex patterns
+    console.log('Testing regex patterns...')
+    
+    // Pattern 1: Simple class="data"
+    const pattern1 = /<tr[^>]*class="data"[^>]*>/gi
+    const matches1 = html.match(pattern1)
+    console.log('Pattern 1 matches:', matches1 ? matches1.length : 0)
+    
+    // Pattern 2: Any tr with data
+    const pattern2 = /<tr[^>]*data[^>]*>/gi
+    const matches2 = html.match(pattern2)
+    console.log('Pattern 2 matches:', matches2 ? matches2.length : 0)
+    
+    // Pattern 3: Just find any row containing NORTHSTAR
+    const northstarRowRegex = /<tr[^>]*>[\s\S]*?NORTHSTAR[\s\S]*?<\/tr>/gis
+    const northstarMatch = html.match(northstarRowRegex)
+    console.log('NORTHSTAR row matches:', northstarMatch ? northstarMatch.length : 0)
+    
+    if (northstarMatch) {
+      console.log('NORTHSTAR row HTML:', northstarMatch[0].slice(0, 500))
+      
+      // Extract cells from NORTHSTAR row
+      const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gis
+      const cells = []
+      let cellMatch
+      
+      while ((cellMatch = cellRegex.exec(northstarMatch[0])) !== null) {
+        let cellContent = cellMatch[1]
+        cellContent = cellContent
+          .replace(/<span[^>]*>/g, '')
+          .replace(/<\/span>/g, '')
+          .replace(/<br\s*\/?>/gi, ' ')
+          .replace(/█/g, '')
+          .replace(/<[^>]*>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+        cells.push(cellContent)
+      }
+      
+      console.log('NORTHSTAR cells:', cells)
+      
+      if (cells.length >= 8) {
+        const result = {
+          position: cells[0],
+          nation: cells[1] || '',
+          name: cells[2] || 'Unknown',
+          sailNo: cells[3] || '',
+          type: cells[4] || '',
+          skipper: cells[5] || '',
+          club: cells[6] || '',
+          class: cells[7] || '',
+          r1: cells[8] || '',
+          r2: cells[9] || '',
+          r3: cells[10] || '',
+          r4: cells[11] || '',
+          total: cells[12] || '',
+          points: cells[12] || ''
+        }
+        
+        results.push(result)
+        console.log('Added NORTHSTAR result:', result)
+      }
+    }
+    
+    // Now try to get ALL data rows using a working pattern
+    if (matches1 && matches1.length > 0) {
+      console.log('Processing all data rows...')
+      
+      // Get full rows including content
+      const fullRowRegex = /<tr[^>]*class="data"[^>]*>[\s\S]*?<\/tr>/gis
+      let fullMatch
+      let fullRowCount = 0
+      
+      while ((fullMatch = fullRowRegex.exec(html)) !== null) {
+        fullRowCount++
+        const rowHtml = fullMatch[0]
+        
+        // Extract cells
+        const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gis
+        const cells = []
+        let cellMatch
+        
+        while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
+          let cellContent = cellMatch[1]
+          cellContent = cellContent
+            .replace(/<span[^>]*>/g, '')
+            .replace(/<\/span>/g, '')
+            .replace(/<br\s*\/?>/gi, ' ')
+            .replace(/█/g, '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+          cells.push(cellContent)
+        }
+        
+        if (cells.length >= 8 && cells[0] && !isNaN(parseInt(cells[0]))) {
+          const result = {
+            position: cells[0],
+            nation: cells[1] || '',
+            name: cells[2] || 'Unknown',
+            sailNo: cells[3] || '',
+            type: cells[4] || '',
+            skipper: cells[5] || '',
+            club: cells[6] || '',
+            class: cells[7] || '',
+            r1: cells[8] || '',
+            r2: cells[9] || '',
+            r3: cells[10] || '',
+            r4: cells[11] || '',
+            total: cells[12] || '',
+            points: cells[12] || ''
+          }
+          
+          // Only add if not already added (avoid duplicates)
+          if (!results.find(r => r.position === result.position)) {
+            results.push(result)
+            console.log(`Added row ${fullRowCount}: ${result.name}`)
+          }
+        }
+      }
+    }
+    
+    console.log(`Processed ${fullRowCount} full data rows`)
+    console.log('Final results:', results.length)
+    
+  } catch (error) {
+    console.error('Error parsing overall results:', error)
+    console.error('Stack:', error.stack)
+  }
+  
+  console.log('=== END ULTRA SIMPLE DEBUG ===')
+  return results
+}// api/results-orc.js - Vercel serverless function to fetch ORC data (no CORS issues)
 
 export default async function handler(req, res) {
   // Enable CORS for your frontend
