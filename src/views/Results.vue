@@ -262,6 +262,7 @@ async function testAPI() {
 .btn.blue { background: #0066cc; }
 .btn.red { background: #cc3333; }
 .btn.yellow { background: #cc9900; }
+.btn.orange { background: #ff6600; }
 
 .info-box {
   background: rgba(0,0,0,.2);
@@ -376,6 +377,55 @@ th {
   max-height: 400px;
   overflow: auto;
   white-space: pre-wrap;
+}
+
+.result-info {
+  background: rgba(0,0,0,.2);
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.result-info p {
+  margin: 5px 0;
+  font-family: monospace;
+}
+
+.html-section, .preview-section, .error-section {
+  background: rgba(0,0,0,.2);
+  padding: 15px;
+  border-radius: 8px;
+  margin: 15px 0;
+}
+
+.html-preview {
+  background: rgba(0,0,0,.4);
+  padding: 15px;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid rgba(255,255,255,.3);
+  margin: 10px 0;
+}
+
+.analysis {
+  background: rgba(0,0,0,.3);
+  padding: 10px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.analysis p {
+  margin: 5px 0;
+}
+
+.raw-json {
+  font-size: 0.7rem !important;
+  max-height: 200px;
 }
 
 h1, h3 {
