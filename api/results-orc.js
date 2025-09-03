@@ -121,7 +121,7 @@ function safeParse(fn, html) {
 }
 
 /* ---------- Simple parsing based on your debug results ---------- */
-function parseSimpleOverall(html) {
+function parseSimpleOverall(html, debug = false) {
   const results = []
   
   try {
@@ -143,25 +143,43 @@ function parseSimpleOverall(html) {
         // Clean the cell content
         const cellText = cellMatch[1]
           .replace(/<[^>]*>/g, '')  // Remove HTML tags
+          .replace(/&amp;/g, '&')  // Decode HTML entities
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
           .replace(/\s+/g, ' ')    // Normalize whitespace
           .trim()
         cells.push(cellText)
       }
       
-      // Based on your debug: [Position, Nation, Boat Name, Sail No, Rating, Skipper]
+      if (debug) {
+        console.log(`Row cells (${cells.length}):`, cells)
+      }
+      
+      // Parse based on actual column count
       if (cells.length >= 6) {
         const position = cells[0] || ''
         
         // Only process if position is numeric
         if (position && !isNaN(parseInt(position, 10))) {
-          results.push({
+          const result = {
             position: position,
-            name: cells[2] || '',      // Boat name (NORTHSTAR OF LONDON)
-            sailNo: cells[3] || '',    // Sail number (GBR72X) 
-            skipper: cells[5] || '',   // Skipper name (Peter Dubens)
-            points: cells[4] || '',    // Rating (IRC 72)
-            total: cells[4] || ''      // Use rating as total
-          })
+            name: cells[2] || '',      // Boat name 
+            sailNo: cells[3] || '',    // Sail number
+            skipper: cells[5] || '',   // Skipper name
+            points: cells[4] || '',    // Currently showing rating
+            total: cells[4] || '',     // Currently showing rating
+            debug_allCells: debug ? cells : undefined
+          }
+          
+          // If we have more columns, try to find actual points/total
+          if (cells.length > 6) {
+            result.points = cells[6] || cells[4] // Try column 6 for points
+            result.total = cells[7] || cells[6] || cells[4] // Try column 7 then 6 for total
+          }
+          
+          results.push(result)
         }
       }
     }
