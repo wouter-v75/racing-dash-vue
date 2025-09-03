@@ -290,13 +290,199 @@ function parseOverallByHeaders(htmlRaw) {
     return hasPos && hasPointsOrTotal
   }) || tables[0]
 
-  if (!headerTable) return []
+  if (!headerTable) {
+    // Fallback to simple parsing if no header table found
+    return parseSimpleOverallResults(htmlRaw)
+  }
+  
   const rows = tableRows(headerTable.html)
   if (!rows.length) return []
 
   // compute header indices (fallbacks)
   const headers = rows[0].map(x => x.trim())
-  const iPos     = headerIndex(headers, '^(pos|#|position)$')
+  const iPos     = headerIndex(headers, '^(pos|#|position)
+
+function grab(arr, idx, fallbackIdx) {
+  return (idx >= 0 ? arr[idx] : arr[fallbackIdx]) || ''
+}
+
+/* ---------- Parsing: race results ---------- */
+function parseRaceForClass(html) {
+  const tables = allTables(html)
+  // Find a table with "Corrected" and ("Finish" or "Elapsed") headers
+  const raceTable = tables.find(t => {
+    const rows = tableRows(t.html)
+    if (!rows.length) return false
+    const hdrs = rows[0].map(x => x.toLowerCase())
+    const hasCorrected = hdrs.some(h => h.includes('corrected'))
+    const hasFinish = hdrs.some(h => h.includes('finish') || h.includes('elapsed'))
+    return hasCorrected && hasFinish
+  })
+  
+  if (!raceTable) return []
+  const rows = tableRows(raceTable.html)
+  if (rows.length < 2) return []
+
+  const headers = rows[0]
+  const iPos       = headerIndex(headers, '^(pos|#|position)$')
+  const iBoat      = headerIndex(headers, '(boat|yacht|name)')
+  const iSail      = headerIndex(headers, '(sail|sail\\s*no|nr|no)')
+  const iSkipper   = headerIndex(headers, '(skipper|owner|helm)')
+  const iFinish    = headerIndex(headers, '(finish|elapsed)')
+  const iCorrected = headerIndex(headers, 'corrected')
+
+  const out = []
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r]
+    const first = parseInt(cells[0], 10)
+    if (isNaN(first)) continue
+
+    const finishTime = grab(cells, iFinish, 4)
+    const corrTime   = grab(cells, iCorrected, 5)
+    out.push({
+      position: grab(cells, iPos, 0),
+      name: grab(cells, iBoat, 1),
+      sailNo: grab(cells, iSail, 2),
+      skipper: grab(cells, iSkipper, 3),
+      finishTime: finishTime,
+      correctedTime: corrTime,
+      delta: out.length ? mmssDelta(out[0].correctedTime, corrTime) : '–'
+    })
+  }
+  return out
+}
+
+function parseRaceChooseClass(html, wantClass) {
+  // For pages with multiple class tables, find the one for wantClass
+  const tables = allTables(html)
+  
+  let targetTable = null
+  if (wantClass) {
+    // Look for a table near a heading or text containing the class name
+    for (const table of tables) {
+      // Check text before the table for class mentions
+      const beforeTable = html.slice(Math.max(0, table.index - 500), table.index)
+      if (beforeTable.toUpperCase().includes(wantClass.toUpperCase())) {
+        targetTable = table
+        break
+      }
+    }
+  }
+  
+  // Fallback to first table with race structure
+  if (!targetTable) {
+    targetTable = tables.find(t => {
+      const rows = tableRows(t.html)
+      if (!rows.length) return false
+      const hdrs = rows[0].map(x => x.toLowerCase())
+      return hdrs.some(h => h.includes('corrected') || h.includes('finish'))
+    })
+  }
+
+  if (!targetTable) return []
+  
+  const rows = tableRows(targetTable.html)
+  if (rows.length < 2) return []
+
+  // Use same logic as parseRaceForClass
+  const headers = rows[0]
+  const iPos       = headerIndex(headers, '^(pos|#|position)$')
+  const iBoat      = headerIndex(headers, '(boat|yacht|name)')
+  const iSail      = headerIndex(headers, '(sail|sail\\s*no|nr|no)')
+  const iSkipper   = headerIndex(headers, '(skipper|owner|helm)')
+  const iFinish    = headerIndex(headers, '(finish|elapsed)')
+  const iCorrected = headerIndex(headers, 'corrected')
+
+  const out = []
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r]
+    const first = parseInt(cells[0], 10)
+    if (isNaN(first)) continue
+
+    const finishTime = grab(cells, iFinish, 4)
+    const corrTime   = grab(cells, iCorrected, 5)
+    out.push({
+      position: grab(cells, iPos, 0),
+      name: grab(cells, iBoat, 1),
+      sailNo: grab(cells, iSail, 2),
+      skipper: grab(cells, iSkipper, 3),
+      finishTime: finishTime,
+      correctedTime: corrTime,
+      delta: out.length ? mmssDelta(out[0].correctedTime, corrTime) : '–'
+    })
+  }
+  return out
+}
+
+/* ---------- Parsing: classes & races ---------- */
+function parseClasses(htmlRaw) {
+  const html = decodeEntities(htmlRaw)
+  const out = []
+  // anchor form (any param order, any quotes)
+  const reA = new RegExp(
+    "href=([\"'])[^\"']*action=series[^\"']*?(?:eventid=[^\"'&>]+&[^\"'>]*classid=([^\"'&>]+)|classid=([^\"'&>]+)[^\"'>]*&[^\"'>]*eventid=[^\"'&>]+)[^\"']*\\1[^>]*>([\\s\\S]*?)<\\/a>",
+    "gi"
+  )
+  let m
+  while ((m = reA.exec(html)) !== null) {
+    const id = (m[2] || m[3] || '').trim()
+    if (id && !out.some(x => x.id === id)) out.push({ id, label: id })
+  }
+  // URL-only fallback
+  if (!out.length) {
+    const reU = new RegExp("action=series[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*classid=([^\\s\"'>&]+)", "gi")
+    while ((m = reU.exec(html)) !== null) {
+      const id = (m[1] || '').trim()
+      if (id && !out.some(x => x.id === id)) out.push({ id, label: id })
+    }
+  }
+  return out
+}
+
+function parseRacesAnyClass(htmlRaw) {
+  const html = decodeEntities(htmlRaw)
+  const out = []
+  const re = new RegExp("action=race[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*raceid=([^\\s\"'>&]+)", "gi")
+  let m
+  while ((m = re.exec(html)) !== null) {
+    const id = (m[1] || '').trim()
+    if (id && !out.some(x => x.id === id)) out.push({ id, label: `RACE ${id}` })
+  }
+  return out.sort((a,b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true, sensitivity:'base' }))
+}
+
+function parseRacesForClass(htmlRaw, wantClass) {
+  const html = decodeEntities(htmlRaw)
+  // Find the segment for this class: from its series link up to the next class/link block
+  const anchorRe = new RegExp(`action=series[^"'>]*classid=${escapeRegex(wantClass)}`, 'i')
+  const start = html.search(anchorRe)
+  if (start < 0) return []
+  // end boundary: next "action=series&...classid=" occurrence
+  const nextRe = new RegExp("action=series[^\"'>]*classid=([A-Za-z0-9]+)", "gi")
+  nextRe.lastIndex = start + 1
+  let end = html.length, m
+  while ((m = nextRe.exec(html)) !== null) {
+    const idx = m.index
+    if (idx > start) { end = idx; break }
+  }
+  const slice = html.slice(start, end)
+  // Collect race links ONLY in this slice
+  const raceRe = new RegExp("action=race[^\\s\"'>]*?(?:\\?|&|&amp;)[^\"'>]*raceid=([^\\s\"'>&]+)", "gi")
+  const out = []
+  while ((m = raceRe.exec(slice)) !== null) {
+    const id = (m[1] || '').trim()
+    if (id && !out.some(x => x.id === id)) out.push({ id, label: `RACE ${id}` })
+  }
+  return out.sort((a,b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true, sensitivity:'base' }))
+}
+function escapeRegex(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
+
+/* ---------- Helpers ---------- */
+async function autoFirstClass(eventId) {
+  const html = await fetchText(indexUrl(eventId))
+  const cls = parseClasses(html)
+  return cls[0]?.id || null
+})
   const iBoat    = headerIndex(headers, '(boat|yacht|name)')
   const iSail    = headerIndex(headers, '(sail|sail\\s*no|nr|no)')
   const iSkipper = headerIndex(headers, '(skipper|owner|helm|helmsman)')
@@ -312,11 +498,11 @@ function parseOverallByHeaders(htmlRaw) {
 
     out.push({
       position: grab(cells, iPos, 0),
-      name:     grab(cells, iBoat, 1),
-      sailNo:   grab(cells, iSail, 2),
-      skipper:  grab(cells, iSkipper, 4),
-      points:   grab(cells, iPoints, 5),   // if header had Pts, you'll get the number here
-      total:    grab(cells, iTotal, 6) || grab(cells, iPoints, 5)
+      name:     grab(cells, iBoat, 2),      // Fallback to column 2 for boat name
+      sailNo:   grab(cells, iSail, 3),     // Fallback to column 3 for sail number
+      skipper:  grab(cells, iSkipper, 5),  // Fallback to column 5 for skipper
+      points:   grab(cells, iPoints, 4),   // Fallback to column 4 for points
+      total:    grab(cells, iTotal, 4) || grab(cells, iPoints, 4)
     })
   }
   return out
