@@ -316,10 +316,9 @@ async function refreshNow() {
 
 // Lifecycle
 onMounted(() => {
-  // Initial load
-  refreshData()
-  // Auto-start polling
-  setTimeout(() => togglePolling(), 1000)
+  // Don't auto-load or auto-poll initially
+  // Let user click "Load Sample" first to see interface
+  addUpdate('👋 Ready! Click "Load Sample" to see interface, or "Debug ORC" to troubleshoot', 'info')
 })
 
 onUnmounted(() => {
