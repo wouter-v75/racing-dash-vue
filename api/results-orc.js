@@ -74,22 +74,13 @@ export default async function handler(req, res) {
       return ok(res, 'overall', rows, { eventId, classId: cls })
     }
 
-    // NEW: Test race fetching
+    // NEW: Race results parsing
     if (type === 'race') {
       if (!raceId) return res.status(400).json({ success: false, message: 'Missing raceId' })
       
       const html = await fetchText(raceUrl(eventId, raceId))
-      
-      // Just return basic info about the HTML, no parsing yet
-      return res.status(200).json({ 
-        success: true, 
-        message: 'Race HTML fetched', 
-        raceId,
-        htmlLength: html.length,
-        containsNorthstar: html.includes('NORTHSTAR'),
-        hasDataClass: html.includes('class="data"'),
-        dataClassCount: (html.match(/class="data"/gi) || []).length
-      })
+      const rows = safeParse(parseSimpleRace, html)
+      return ok(res, 'race', rows, { eventId, raceId })
     }
 
     return res.status(400).json({ success: false, message: 'Unknown type' })
@@ -139,7 +130,7 @@ function safeParse(fn, html) {
   }
 }
 
-/* ---------- Simple parsing based on your debug results ---------- */
+/* ---------- Parsing Functions ---------- */
 function parseSimpleOverall(html, debug = false) {
   const results = []
   
