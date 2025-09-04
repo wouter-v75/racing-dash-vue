@@ -64,7 +64,41 @@ export default async function handler(req, res) {
       }
     }
 
-    // Other endpoints...
+    // Debug race parsing
+    if (type === 'debug-race') {
+      if (!raceId) return res.status(400).json({ success: false, message: 'Missing raceId for debug-race' })
+      
+      try {
+        const html = await fetchText(raceUrl(eventId, raceId))
+        
+        // Simple debug info
+        const debug = {
+          htmlLength: html.length,
+          containsNorthstar: html.includes('NORTHSTAR'),
+          hasDataClass: html.includes('class="data"'),
+          dataClassCount: (html.match(/class="data"/gi) || []).length
+        }
+
+        // Parse with debug enabled
+        const results = parseSimpleRace(html, true)
+        debug.parsedCount = results.length
+        debug.results = results
+
+        return res.status(200).json({
+          success: true,
+          resultType: 'debug-race', 
+          debug,
+          meta: { eventId, raceId }
+        })
+      } catch (err) {
+        return res.status(500).json({
+          success: false,
+          error: err.message
+        })
+      }
+    }
+
+    // Overall series results
     if (type === 'overall') {
       const cls = classId || (await autoFirstClass(eventId))
       if (!cls) return ok(res, 'overall', [], { eventId, classId: null })
@@ -74,14 +108,14 @@ export default async function handler(req, res) {
       return ok(res, 'overall', rows, { eventId, classId: cls })
     }
 
-    // NEW: Race results parsing
+    // Race results - SINGLE HANDLER ONLY
     if (type === 'race') {
-  if (!raceId) return res.status(400).json({ success: false, message: 'Missing raceId' })
-  
-  const html = await fetchText(raceUrl(eventId, raceId))
-  const rows = safeParse(parseSimpleRace, html)
-  return ok(res, 'race', rows, { eventId, raceId })
-}
+      if (!raceId) return res.status(400).json({ success: false, message: 'Missing raceId' })
+      
+      const html = await fetchText(raceUrl(eventId, raceId))
+      const rows = safeParse(parseSimpleRace, html)
+      return ok(res, 'race', rows, { eventId, raceId })
+    }
 
     return res.status(400).json({ success: false, message: 'Unknown type' })
 
@@ -210,7 +244,7 @@ function parseSimpleRace(html, debug = false) {
   const results = []
   
   try {
-    // Find all data rows - same as series parsing
+    // Same approach as working series parser
     const tableRowRegex = /<tr\s+class="data"[^>]*>.*?<\/tr>/gis
     const matches = html.match(tableRowRegex)
     
@@ -239,27 +273,25 @@ function parseSimpleRace(html, debug = false) {
         cells.push(cellText)
       }
       
-      // Parse race results based on HTML structure
-      // Columns: Overall Pos | Nation | Yacht Name | Sail No | Type | Owner | Finish Time | Elapsed | Corrected | Delta | TCC
-      if (cells.length >= 6) {
+      // Map directly to the known race structure - NO guessing
+      if (cells.length >= 11) {
         const position = cells[0] || ''
         
-        // Only process if position is numeric
         if (position && !isNaN(parseInt(position, 10))) {
           const result = {
-            position: position,           // Column 0: Overall Pos
-            nation: cells[1] || '',       // Column 1: Nation
-            name: cells[2] || '',         // Column 2: Yacht Name
-            sailNo: cells[3] || '',       // Column 3: Sail No
-            type: cells[4] || '',         // Column 4: Type (IRC 72, etc.)
-            owner: cells[5] || '',        // Column 5: Owner
-            finishTime: cells[6] || '',   // Column 6: Finish Time
-            elapsed: cells[7] || '',      // Column 7: Elapsed
-            correctedTime: cells[8] || '',// Column 8: Corrected
-            delta: cells[9] || '',        // Column 9: Delta
-            tcc: cells[10] || ''          // Column 10: TCC
+            position: cells[0],        // col_PosOvl
+            nation: cells[1],          // col_Nation  
+            name: cells[2],            // col_YachtName
+            sailNo: cells[3],          // col_SailNo
+            type: cells[4],            // col_YClass
+            owner: cells[5],           // col_Owner
+            finishTime: cells[6],      // col_FinishTime
+            elapsed: cells[7],         // col_ElapsedSecs
+            correctedTime: cells[8],   // col_CorrectedSeconds
+            delta: cells[9],           // col_CorrDelay
+            tcc: cells[10]             // col_TOT
           }
-          
+
           // Add debug info if requested
           if (debug) {
             result.debug_allCells = cells
