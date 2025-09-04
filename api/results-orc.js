@@ -106,6 +106,7 @@ export default async function handler(req, res) {
 /* ---------- URLs ---------- */
 const indexUrl = (eventId) => `https://data.orc.org/public/WEV.dll?action=index&eventid=${encodeURIComponent(eventId)}`
 const seriesUrl = (eventId, cls) => `https://data.orc.org/public/WEV.dll?action=series&eventid=${encodeURIComponent(eventId)}&classid=${encodeURIComponent(cls)}`
+const raceUrl = (eventId, raceId) => `https://data.orc.org/public/WEV.dll?action=race&eventid=${encodeURIComponent(eventId)}&raceid=${encodeURIComponent(raceId)}`
 
 /* ---------- HTTP ---------- */
 async function fetchText(url) {
@@ -209,6 +210,78 @@ function parseSimpleOverall(html, debug = false) {
     
   } catch (error) {
     console.error('Error in parseSimpleOverall:', error)
+  }
+  
+  return results
+}
+
+function parseSimpleRace(html, debug = false) {
+  const results = []
+  
+  try {
+    // Find all data rows - same as series parsing
+    const tableRowRegex = /<tr\s+class="data"[^>]*>.*?<\/tr>/gis
+    const matches = html.match(tableRowRegex)
+    
+    if (!matches) {
+      console.log('No data rows found in race results')
+      return results
+    }
+
+    for (let i = 0; i < matches.length; i++) {
+      const row = matches[i]
+      const cellRegex = /<td[^>]*>(.*?)<\/td>/gis
+      const cells = []
+      let cellMatch
+      
+      while ((cellMatch = cellRegex.exec(row)) !== null) {
+        // Clean the cell content - same as series parsing
+        const cellText = cellMatch[1]
+          .replace(/<[^>]*>/g, '')  // Remove HTML tags
+          .replace(/&amp;/g, '&')  // Decode HTML entities
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\s+/g, ' ')    // Normalize whitespace
+          .trim()
+        cells.push(cellText)
+      }
+      
+      // Parse race results based on HTML structure
+      // Columns: Overall Pos | Nation | Yacht Name | Sail No | Type | Owner | Finish Time | Elapsed | Corrected | Delta | TCC
+      if (cells.length >= 6) {
+        const position = cells[0] || ''
+        
+        // Only process if position is numeric
+        if (position && !isNaN(parseInt(position, 10))) {
+          const result = {
+            position: position,           // Column 0: Overall Pos
+            nation: cells[1] || '',       // Column 1: Nation
+            name: cells[2] || '',         // Column 2: Yacht Name
+            sailNo: cells[3] || '',       // Column 3: Sail No
+            type: cells[4] || '',         // Column 4: Type (IRC 72, etc.)
+            owner: cells[5] || '',        // Column 5: Owner
+            finishTime: cells[6] || '',   // Column 6: Finish Time
+            elapsed: cells[7] || '',      // Column 7: Elapsed
+            correctedTime: cells[8] || '',// Column 8: Corrected
+            delta: cells[9] || '',        // Column 9: Delta
+            tcc: cells[10] || ''          // Column 10: TCC
+          }
+          
+          // Add debug info if requested
+          if (debug) {
+            result.debug_allCells = cells
+            result.debug_cellCount = cells.length
+          }
+          
+          results.push(result)
+        }
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error in parseSimpleRace:', error)
   }
   
   return results
