@@ -448,124 +448,139 @@ export default {
 
 <style scoped>
 .glass-card {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  box-shadow: 0 4px 24px 0 rgba(31, 38, 135, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
   transition: all 0.3s ease;
-  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-/* More transparent glass for settings modal */
-.glass-card.rounded-2xl {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(25px);
-  -webkit-backdrop-filter: blur(25px);
-}
-
-/* Table headers with extra glass effect */
-.bg-black\/20 {
-  background: rgba(0, 0, 0, 0.1) !important;
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-}
-
-/* Enhanced transparency for highlighted rows */
-.bg-blue-400\/20 {
-  background: rgba(59, 130, 246, 0.15) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-/* Hover effects for table rows */
-.hover\:bg-white\/5:hover {
-  background: rgba(255, 255, 255, 0.03) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-/* Admin settings button */
-button.glass-card {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
+  box-shadow: 0 6px 30px 0 rgba(31, 38, 135, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-button.glass-card:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+/* Settings modal - slightly less transparent for readability */
+.glass-card.rounded-2xl {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
-/* Background selection borders */
+/* Table headers with minimal glass effect */
+.bg-black\/20 {
+  background: rgba(0, 0, 0, 0.05) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Very subtle highlight for NORTHSTAR */
+.bg-blue-400\/20 {
+  background: rgba(59, 130, 246, 0.08) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+}
+
+/* Minimal hover effects for table rows */
+.hover\:bg-white\/5:hover {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* Admin settings button - very transparent */
+button.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+button.glass-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Minimal borders */
 .border-white\/20 {
-  border-color: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .border-white\/40 {
-  border-color: rgba(255, 255, 255, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-/* Smooth transitions for all interactive elements */
+/* Smooth transitions */
 * {
   transition: all 0.3s ease;
 }
 
-/* Enhanced scrollbar styling for glass effect */
+/* Ultra-minimal scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
   border-radius: 10px;
-  backdrop-filter: blur(5px);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 10px;
-  backdrop-filter: blur(5px);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.25);
 }
 
-/* Loading card extra transparency */
+/* Loading card */
 .glass-card.p-8 {
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(30px);
-  -webkit-backdrop-filter: blur(30px);
-}
-
-/* Footer buttons with glass effect */
-.glass-card.border-white\/20 {
   background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Footer buttons - very subtle */
+.glass-card.border-white\/20 {
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .glass-card.border-blue-400\/50 {
-  background: rgba(59, 130, 246, 0.06);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(59, 130, 246, 0.2);
 }
 
-/* Enhanced glass morphism for modal overlay */
+/* Modal overlay - minimal blur */
 .bg-black\/50 {
-  background: rgba(0, 0, 0, 0.3) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.25) !important;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Enhance text contrast for readability on transparent cards */
+.text-white {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.text-white\/80 {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.text-white\/60 {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* Improve number visibility */
+.text-3xl, .text-2xl, .text-xl {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  font-weight: 700;
 }
 </style>
