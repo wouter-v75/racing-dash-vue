@@ -76,12 +76,12 @@ export default async function handler(req, res) {
 
     // NEW: Race results parsing
     if (type === 'race') {
-      if (!raceId) return res.status(400).json({ success: false, message: 'Missing raceId' })
-      
-      const html = await fetchText(raceUrl(eventId, raceId))
-      const rows = safeParse(parseSimpleRace, html)
-      return ok(res, 'race', rows, { eventId, raceId })
-    }
+  if (!raceId) return res.status(400).json({ success: false, message: 'Missing raceId' })
+  
+  const html = await fetchText(raceUrl(eventId, raceId))
+  const rows = safeParse(parseSimpleRace, html)
+  return ok(res, 'race', rows, { eventId, raceId })
+}
 
     return res.status(400).json({ success: false, message: 'Unknown type' })
 
