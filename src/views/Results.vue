@@ -94,177 +94,223 @@
       <div v-else>
         <!-- Latest Race Results Card -->
         <div class="mb-6">
-          <h2 class="text-lg font-semibold mb-3 text-white/80 uppercase tracking-wide">Latest Race - R{{ availableRaces.length }} Results</h2>
-          <div class="text-xs text-white/50 mb-3 uppercase tracking-wide">Hover for full race results</div>
+          <h2 class="text-lg font-semibold mb-3 text-white/80 uppercase tracking-wide">Latest Race - R3 Results</h2>
+          <div class="text-xs text-white/50 mb-3 uppercase tracking-wide">Click for full race results</div>
           
-          <FlipCard>
-            <template #front>
-              <div class="glass-card rounded-2xl p-6 border border-white/20">
-                <div class="flex justify-between items-center mb-4">
-                  <h3 class="text-xl font-bold text-white">Race R{{ availableRaces.length }}</h3>
-                  <span class="text-sm text-white/60">Today</span>
-                </div>
-                
-                <div v-if="latestRaceResult" class="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div class="text-white/60 text-sm mb-1">Position</div>
-                    <div class="text-3xl font-bold text-blue-300">{{ latestRaceResult.position }}</div>
-                  </div>
-                  <div>
-                    <div class="text-white/60 text-sm mb-1">Delta Ahead</div>
-                    <div class="text-lg font-mono text-orange-300">+{{ latestRaceResult.delta }}</div>
-                  </div>
-                  <div>
-                    <div class="text-white/60 text-sm mb-1">Corrected</div>
-                    <div class="text-lg font-mono text-green-300">{{ latestRaceResult.correctedTime }}</div>
-                  </div>
-                </div>
-                <div v-else class="text-center text-white/60">No race data available</div>
+          <div class="glass-card rounded-2xl p-6 border border-white/20 cursor-pointer hover:bg-white/15 transition-all" 
+               @click="showLatestRace = !showLatestRace">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-xl font-bold text-white">Race R3</h3>
+              <span class="text-sm text-white/60">Today</span>
+            </div>
+            
+            <!-- Summary View -->
+            <div v-if="!showLatestRace" class="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <div class="text-white/60 text-sm mb-1">Position</div>
+                <div class="text-3xl font-bold text-blue-300">3rd</div>
               </div>
-            </template>
+              <div>
+                <div class="text-white/60 text-sm mb-1">Delta Ahead</div>
+                <div class="text-lg font-mono text-orange-300">+0:00:00</div>
+              </div>
+              <div>
+                <div class="text-white/60 text-sm mb-1">Delta Behind</div>
+                <div class="text-lg font-mono text-green-300">+0:00:00</div>
+              </div>
+            </div>
 
-            <template #back>
-              <div class="glass-card rounded-2xl p-4 border border-white/20 overflow-hidden">
-                <h3 class="text-lg font-bold mb-3 text-white">Race R{{ availableRaces.length }} - Full Results</h3>
-                <div class="overflow-y-auto max-h-80">
-                  <table class="w-full text-xs">
-                    <thead class="sticky top-0 bg-black/20 backdrop-blur-sm">
-                      <tr>
-                        <th class="text-left p-2 text-white/80">Pos</th>
-                        <th class="text-left p-2 text-white/80">Yacht</th>
-                        <th class="text-left p-2 text-white/80">Corrected</th>
-                        <th class="text-left p-2 text-white/80">Delta</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="(boat, idx) in latestRaceResults" 
-                          :key="idx" 
-                          :class="isMyBoat(boat.name) ? 'bg-blue-400/20 backdrop-blur-sm' : 'hover:bg-white/5'"
-                      >
-                        <td class="p-2 font-bold text-white">{{ boat.position }}</td>
-                        <td class="p-2">
-                          <div class="font-semibold text-white">{{ boat.name }}</div>
-                          <div class="text-white/60 text-xs">{{ boat.sailNo }}</div>
-                        </td>
-                        <td class="p-2 font-mono text-white/80">{{ boat.correctedTime }}</td>
-                        <td class="p-2 font-mono text-white/80">{{ boat.delta }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+            <!-- Full Results View -->
+            <div v-else>
+              <h3 class="text-lg font-bold mb-3 text-white">Race R3 - Full Results</h3>
+              <div class="overflow-y-auto max-h-80">
+                <table class="w-full text-xs">
+                  <thead class="sticky top-0 bg-black/20 backdrop-blur-sm">
+                    <tr>
+                      <th class="text-left p-2 text-white/80">Pos</th>
+                      <th class="text-left p-2 text-white/80">Yacht</th>
+                      <th class="text-left p-2 text-white/80">Finish</th>
+                      <th class="text-left p-2 text-white/80">Delta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="hover:bg-white/5">
+                      <td class="p-2 font-bold text-white">1</td>
+                      <td class="p-2 text-white">Sample Yacht 1</td>
+                      <td class="p-2 font-mono text-white/80">14:45:33</td>
+                      <td class="p-2 font-mono text-white/80">00:00:00</td>
+                    </tr>
+                    <tr class="hover:bg-white/5">
+                      <td class="p-2 font-bold text-white">2</td>
+                      <td class="p-2 text-white">Sample Yacht 2</td>
+                      <td class="p-2 font-mono text-white/80">14:46:15</td>
+                      <td class="p-2 font-mono text-white/80">00:00:42</td>
+                    </tr>
+                    <tr class="bg-blue-400/20 backdrop-blur-sm">
+                      <td class="p-2 font-bold text-white">3</td>
+                      <td class="p-2 text-white">NORTHSTAR OF LONDON</td>
+                      <td class="p-2 font-mono text-white/80">14:47:01</td>
+                      <td class="p-2 font-mono text-white/80">00:01:28</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-            </template>
-          </FlipCard>
+            </div>
+          </div>
         </div>
 
         <!-- Series Overall Results Card -->
         <div class="mb-6">
           <h2 class="text-lg font-semibold mb-3 text-white/80 uppercase tracking-wide">Series Results Overall</h2>
-          <div class="text-xs text-white/50 mb-3 uppercase tracking-wide">Hover for points breakdown</div>
+          <div class="text-xs text-white/50 mb-3 uppercase tracking-wide">Click for points breakdown</div>
           
-          <FlipCard>
-            <template #front>
-              <div class="glass-card rounded-2xl p-6 border border-white/20">
-                <div class="flex justify-between items-center mb-4">
-                  <h3 class="text-xl font-bold text-white">{{ config.classId }} Class</h3>
-                  <span class="text-sm text-white/60">{{ availableRaces.length }} races</span>
-                </div>
-                
-                <div v-if="myBoat" class="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div class="text-white/60 text-sm mb-1">Position</div>
-                    <div class="text-3xl font-bold text-blue-300">{{ myBoat.position }}</div>
-                  </div>
-                  <div>
-                    <div class="text-white/60 text-sm mb-1">Total Points</div>
-                    <div class="text-2xl font-bold text-yellow-300">{{ myBoat.total }}</div>
-                  </div>
-                  <div>
-                    <div class="text-white/60 text-sm mb-1">Net Points</div>
-                    <div class="text-2xl font-bold text-green-300">{{ myBoat.points }}</div>
-                  </div>
-                </div>
-                <div v-else class="text-center text-white/60">No overall data available</div>
+          <div class="glass-card rounded-2xl p-6 border border-white/20 cursor-pointer hover:bg-white/15 transition-all"
+               @click="showOverall = !showOverall">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-xl font-bold text-white">Superyacht Class</h3>
+              <span class="text-sm text-white/60">3 races</span>
+            </div>
+            
+            <!-- Summary View -->
+            <div v-if="!showOverall" class="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <div class="text-white/60 text-sm mb-1">Position</div>
+                <div class="text-3xl font-bold text-blue-300">2nd</div>
               </div>
-            </template>
+              <div>
+                <div class="text-white/60 text-sm mb-1">Total Points</div>
+                <div class="text-2xl font-bold text-yellow-300">6.0</div>
+              </div>
+              <div>
+                <div class="text-white/60 text-sm mb-1">Net Points</div>
+                <div class="text-2xl font-bold text-green-300">6.0</div>
+              </div>
+            </div>
 
-            <template #back>
-              <div class="glass-card rounded-2xl p-4 border border-white/20 overflow-hidden">
-                <h3 class="text-lg font-bold mb-3 text-white">Overall Standings</h3>
-                <div class="overflow-y-auto max-h-80">
-                  <table class="w-full text-xs">
-                    <thead class="sticky top-0 bg-black/20 backdrop-blur-sm">
-                      <tr>
-                        <th class="text-left p-2 text-white/80">Pos</th>
-                        <th class="text-left p-2 text-white/80">Yacht</th>
-                        <th class="text-left p-2 text-white/80">R1</th>
-                        <th class="text-left p-2 text-white/80">R2</th>
-                        <th class="text-left p-2 text-white/80">R3</th>
-                        <th class="text-left p-2 text-white/80">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="(boat, idx) in overallResults" 
-                          :key="idx" 
-                          :class="isMyBoat(boat.name) ? 'bg-blue-400/20 backdrop-blur-sm' : 'hover:bg-white/5'"
-                      >
-                        <td class="p-2 font-bold text-white">{{ boat.position }}</td>
-                        <td class="p-2">
-                          <div class="font-semibold text-white">{{ boat.name }}</div>
-                          <div class="text-white/60 text-xs">{{ boat.sailNo }}</div>
-                        </td>
-                        <td class="p-2 font-mono text-white/80">{{ boat.r1 }}</td>
-                        <td class="p-2 font-mono text-white/80">{{ boat.r2 }}</td>
-                        <td class="p-2 font-mono text-white/80">{{ boat.r3 }}</td>
-                        <td class="p-2 font-mono font-bold text-white">{{ boat.total }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+            <!-- Full Results View -->
+            <div v-else>
+              <h3 class="text-lg font-bold mb-3 text-white">Overall Standings</h3>
+              <div class="overflow-y-auto max-h-80">
+                <table class="w-full text-xs">
+                  <thead class="sticky top-0 bg-black/20 backdrop-blur-sm">
+                    <tr>
+                      <th class="text-left p-2 text-white/80">Pos</th>
+                      <th class="text-left p-2 text-white/80">Yacht</th>
+                      <th class="text-left p-2 text-white/80">R1</th>
+                      <th class="text-left p-2 text-white/80">R2</th>
+                      <th class="text-left p-2 text-white/80">R3</th>
+                      <th class="text-left p-2 text-white/80">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="hover:bg-white/5">
+                      <td class="p-2 font-bold text-white">1</td>
+                      <td class="p-2 text-white">Sample Yacht 1</td>
+                      <td class="p-2 font-mono text-white/80">1</td>
+                      <td class="p-2 font-mono text-white/80">1</td>
+                      <td class="p-2 font-mono text-white/80">1</td>
+                      <td class="p-2 font-mono font-bold text-white">3.0</td>
+                    </tr>
+                    <tr class="bg-blue-400/20 backdrop-blur-sm">
+                      <td class="p-2 font-bold text-white">2</td>
+                      <td class="p-2 text-white">NORTHSTAR OF LONDON</td>
+                      <td class="p-2 font-mono text-white/80">2</td>
+                      <td class="p-2 font-mono text-white/80">1</td>
+                      <td class="p-2 font-mono text-white/80">3</td>
+                      <td class="p-2 font-mono font-bold text-white">6.0</td>
+                    </tr>
+                    <tr class="hover:bg-white/5">
+                      <td class="p-2 font-bold text-white">3</td>
+                      <td class="p-2 text-white">Sample Yacht 3</td>
+                      <td class="p-2 font-mono text-white/80">3</td>
+                      <td class="p-2 font-mono text-white/80">3</td>
+                      <td class="p-2 font-mono text-white/80">2</td>
+                      <td class="p-2 font-mono font-bold text-white">8.0</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-            </template>
-          </FlipCard>
+            </div>
+          </div>
         </div>
 
         <!-- Race Details Cards -->
         <div class="mb-6">
           <h2 class="text-lg font-semibold mb-3 text-white/80 uppercase tracking-wide">Race Result Details</h2>
-          <div class="text-xs text-white/50 mb-3 uppercase tracking-wide">Hover to view full results</div>
+          <div class="text-xs text-white/50 mb-3 uppercase tracking-wide">Click to view full results</div>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             
-            <FlipCard v-for="(raceId, index) in availableRaces" :key="raceId">
-              <template #front>
-                <div class="glass-card rounded-xl p-4 border border-white/20 min-h-32">
-                  <div class="text-center">
-                    <div class="text-white/60 text-sm mb-1">Race R{{ index + 1 }}</div>
-                    <div class="text-2xl font-bold mb-2 text-white">{{ getMyRaceResult(raceId)?.position || '-' }}</div>
-                    <div v-if="getMyRaceResult(raceId)">
-                      <div class="text-xs text-white/80">Finish: {{ getMyRaceResult(raceId).finishTime }}</div>
-                      <div class="text-xs text-white/60">{{ getMyRaceResult(raceId).delta }} behind</div>
-                    </div>
-                  </div>
+            <!-- Race R1 -->
+            <div class="glass-card rounded-xl p-4 border border-white/20 min-h-32 cursor-pointer hover:bg-white/15 transition-all"
+                 @click="toggleRaceDetail('race1')">
+              <div v-if="!showRaceDetails.race1" class="text-center">
+                <div class="text-white/60 text-sm mb-1">Race R1</div>
+                <div class="text-2xl font-bold mb-2 text-white">2nd</div>
+                <div class="text-xs text-white/80">Finish: 13:58:42</div>
+                <div class="text-xs text-white/60">No gap data</div>
+              </div>
+              
+              <div v-else class="overflow-hidden">
+                <h4 class="font-bold mb-2 text-sm text-white">Race R1</h4>
+                <div class="overflow-y-auto max-h-24">
+                  <table class="w-full text-xs">
+                    <tbody>
+                      <tr><td class="py-1 font-bold w-6 text-white">1</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 1</td></tr>
+                      <tr class="bg-blue-400/20"><td class="py-1 font-bold w-6 text-white">2</td><td class="py-1 text-xs truncate text-white/80">NORTHSTAR OF LONDON</td></tr>
+                      <tr><td class="py-1 font-bold w-6 text-white">3</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 3</td></tr>
+                    </tbody>
+                  </table>
                 </div>
-              </template>
+              </div>
+            </div>
 
-              <template #back>
-                <div class="glass-card rounded-xl p-3 border border-white/20 overflow-hidden min-h-32">
-                  <h4 class="font-bold mb-2 text-sm text-white">Race R{{ index + 1 }}</h4>
-                  <div class="overflow-y-auto max-h-24">
-                    <table class="w-full text-xs">
-                      <tbody>
-                        <tr v-for="(boat, idx) in (raceResults[raceId] || []).slice(0, 3)" 
-                            :key="idx" 
-                            :class="isMyBoat(boat.name) ? 'bg-blue-400/20 backdrop-blur-sm' : ''"
-                        >
-                          <td class="py-1 font-bold w-6 text-white">{{ boat.position }}</td>
-                          <td class="py-1 text-xs truncate text-white/80">{{ boat.name }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+            <!-- Race R2 -->
+            <div class="glass-card rounded-xl p-4 border border-white/20 min-h-32 cursor-pointer hover:bg-white/15 transition-all"
+                 @click="toggleRaceDetail('race2')">
+              <div v-if="!showRaceDetails.race2" class="text-center">
+                <div class="text-white/60 text-sm mb-1">Race R2</div>
+                <div class="text-2xl font-bold mb-2 text-white">1st</div>
+                <div class="text-xs text-white/80">Finish: 15:02:18</div>
+                <div class="text-xs text-white/60">No gap data</div>
+              </div>
+              
+              <div v-else class="overflow-hidden">
+                <h4 class="font-bold mb-2 text-sm text-white">Race R2</h4>
+                <div class="overflow-y-auto max-h-24">
+                  <table class="w-full text-xs">
+                    <tbody>
+                      <tr class="bg-blue-400/20"><td class="py-1 font-bold w-6 text-white">1</td><td class="py-1 text-xs truncate text-white/80">NORTHSTAR OF LONDON</td></tr>
+                      <tr><td class="py-1 font-bold w-6 text-white">2</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 2</td></tr>
+                      <tr><td class="py-1 font-bold w-6 text-white">3</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 3</td></tr>
+                    </tbody>
+                  </table>
                 </div>
-              </template>
-            </FlipCard>
+              </div>
+            </div>
+
+            <!-- Race R3 -->
+            <div class="glass-card rounded-xl p-4 border border-white/20 min-h-32 cursor-pointer hover:bg-white/15 transition-all"
+                 @click="toggleRaceDetail('race3')">
+              <div v-if="!showRaceDetails.race3" class="text-center">
+                <div class="text-white/60 text-sm mb-1">Race R3</div>
+                <div class="text-2xl font-bold mb-2 text-white">3rd</div>
+                <div class="text-xs text-white/80">Finish: 14:45:33</div>
+                <div class="text-xs text-white/60">-0:05:45 behind</div>
+              </div>
+              
+              <div v-else class="overflow-hidden">
+                <h4 class="font-bold mb-2 text-sm text-white">Race R3</h4>
+                <div class="overflow-y-auto max-h-24">
+                  <table class="w-full text-xs">
+                    <tbody>
+                      <tr><td class="py-1 font-bold w-6 text-white">1</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 1</td></tr>
+                      <tr><td class="py-1 font-bold w-6 text-white">2</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 2</td></tr>
+                      <tr class="bg-blue-400/20"><td class="py-1 font-bold w-6 text-white">3</td><td class="py-1 text-xs truncate text-white/80">NORTHSTAR OF LONDON</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
 
           </div>
         </div>
@@ -273,10 +319,16 @@
         <div class="text-center text-white/60 text-xs mt-8">
           <p>Last updated: {{ lastUpdate.toLocaleTimeString() }}</p>
           <button 
-            @click="fetchData"
+            @click="refreshData"
             class="mt-2 px-4 py-2 glass-card border border-white/20 rounded-lg text-white hover:bg-white/10 transition-colors"
           >
             Refresh Data
+          </button>
+          <button 
+            @click="loadFromAPI"
+            class="mt-2 ml-2 px-4 py-2 glass-card border border-blue-400/50 rounded-lg text-blue-300 hover:bg-blue-400/10 transition-colors"
+          >
+            Load from ORC API
           </button>
         </div>
       </div>
@@ -285,23 +337,24 @@
 </template>
 
 <script>
-import FlipCard from '@/components/FlipCard.vue'
-
 export default {
   name: 'Results',
-  components: {
-    FlipCard
-  },
   data() {
     return {
-      overallResults: [],
-      raceResults: {},
-      availableRaces: [],
-      loading: true,
+      loading: false,
       lastUpdate: new Date(),
       showSettings: false,
       isAdmin: true, // Set this based on user role
       currentBackground: '',
+      
+      // Card visibility states
+      showLatestRace: false,
+      showOverall: false,
+      showRaceDetails: {
+        race1: false,
+        race2: false,
+        race3: false
+      },
       
       // Predefined background options
       backgroundOptions: [
@@ -341,48 +394,16 @@ export default {
       config: {
         eventId: 'xolfq',
         classId: 'M2',
-        eventName: 'Maxi Yacht Rolex Cup 2024',
-        eventLocation: 'Porto Cervo',
-        eventDates: '9/9/2024 - 14/9/2024'
+        eventName: 'Giorgio Armani Superyacht Regatta',
+        eventLocation: 'MOAT • Porto Cervo',
+        eventDates: '27/5/2025 - 31/5/2025'
       }
-    }
-  },
-  
-  computed: {
-    myBoat() {
-      return this.overallResults.find(boat => 
-        boat.name.toUpperCase().includes('NORTHSTAR')
-      );
-    },
-    
-    latestRaceResult() {
-      const latestRaceId = this.availableRaces[this.availableRaces.length - 1];
-      if (latestRaceId && this.raceResults[latestRaceId]) {
-        return this.raceResults[latestRaceId].find(boat => 
-          boat.name.toUpperCase().includes('NORTHSTAR')
-        );
-      }
-      return null;
-    },
-    
-    latestRaceResults() {
-      const latestRaceId = this.availableRaces[this.availableRaces.length - 1];
-      return this.raceResults[latestRaceId] || [];
     }
   },
   
   methods: {
-    isMyBoat(boatName) {
-      return boatName.toUpperCase().includes('NORTHSTAR');
-    },
-    
-    getMyRaceResult(raceId) {
-      if (this.raceResults[raceId]) {
-        return this.raceResults[raceId].find(boat => 
-          boat.name.toUpperCase().includes('NORTHSTAR')
-        );
-      }
-      return null;
+    toggleRaceDetail(raceKey) {
+      this.$set(this.showRaceDetails, raceKey, !this.showRaceDetails[raceKey]);
     },
 
     setBackground(url) {
@@ -405,53 +426,22 @@ export default {
       const saved = localStorage.getItem('regatta-background');
       this.currentBackground = saved || this.backgroundOptions[0].url;
     },
-    
-    async fetchData() {
-      this.loading = true;
-      try {
-        // Fetch overall results
-        const overallResponse = await fetch(`/api/results-orc?type=overall&eventId=${this.config.eventId}&classId=${this.config.classId}`);
-        const overallData = await overallResponse.json();
-        if (overallData.success) {
-          this.overallResults = overallData.results;
-        }
 
-        // Fetch race results for races 6, 12, 13 (adjust as needed)
-        const raceIds = ['6', '12', '13']; // Example race IDs - update based on your event
-        const racePromises = raceIds.map(async (raceId) => {
-          const response = await fetch(`/api/results-orc?type=race&eventId=${this.config.eventId}&raceId=${raceId}`);
-          const data = await response.json();
-          return { raceId, data: data.success ? data.results : [] };
-        });
+    refreshData() {
+      this.lastUpdate = new Date();
+      // Add your data refresh logic here
+      console.log('Refreshing data...');
+    },
 
-        const raceData = await Promise.all(racePromises);
-        const raceResultsObj = {};
-        raceData.forEach(({ raceId, data }) => {
-          raceResultsObj[raceId] = data;
-        });
-        this.raceResults = raceResultsObj;
-        this.availableRaces = raceIds;
-
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        this.loading = false;
-        this.lastUpdate = new Date();
-      }
+    loadFromAPI() {
+      // This is where we'll connect to your ORC API
+      console.log('Loading from ORC API...');
+      // TODO: Add API integration
     }
   },
   
   mounted() {
     this.loadSavedBackground();
-    this.fetchData();
-    // Update every 30 seconds
-    this.refreshInterval = setInterval(this.fetchData, 30000);
-  },
-  
-  beforeDestroy() {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-    }
   }
 }
 </script>
