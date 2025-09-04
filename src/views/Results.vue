@@ -1,421 +1,379 @@
 <template>
-  <div class="debug-page">
-    <h1>ORC Class ID Debug Test</h1>
-    
-    <div class="big-buttons">
-      <button @click="testM2" class="big-btn m2">
-        TEST M2 CLASS
-      </button>
-      <button @click="testIRC72" class="big-btn irc72">
-        TEST IRC72 CLASS  
-      </button>
-      <button @click="loadSample" class="big-btn sample">
-        LOAD SAMPLE DATA
-      </button>
-    </div>
-    
-    <div class="status-info">
-      <div class="status-box">
-        <h3>Current Status:</h3>
-        <p><strong>Boats loaded:</strong> {{ seriesData.length }}</p>
-        <p><strong>NORTHSTAR found:</strong> {{ northstarFound ? 'YES ✅' : 'NO ❌' }}</p>
-        <p><strong>Last test:</strong> {{ lastTest || 'None' }}</p>
-      </div>
-    </div>
-
-    <div v-if="testResult" class="test-results">
-      <h3>Test Results for {{ testResult.classId }}:</h3>
-      <div class="test-info">
-        <p><strong>URL tested:</strong> {{ testResult.url }}</p>
-        <p><strong>Success:</strong> {{ testResult.success ? 'YES ✅' : 'NO ❌' }}</p>
-        <p><strong>Boats found:</strong> {{ testResult.boatsFound || 0 }}</p>
-        <p><strong>HTML length:</strong> {{ testResult.htmlLength || 0 }} chars</p>
-        <p><strong>Contains NORTHSTAR:</strong> {{ testResult.hasNorthstar ? 'YES ✅' : 'NO ❌' }}</p>
-        <p><strong>Contains table pipes:</strong> {{ testResult.hasPipes ? 'YES ✅' : 'NO ❌' }}</p>
-      </div>
-      
-      <div v-if="testResult.northstarLines?.length" class="northstar-lines">
-        <h4>NORTHSTAR Lines Found:</h4>
-        <div class="code-block">
-          <div v-for="(line, i) in testResult.northstarLines" :key="i">{{ line }}</div>
+  <div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-4">
+    <!-- Header -->
+    <div class="mb-6">
+      <div class="flex justify-between items-start mb-2">
+        <div>
+          <h1 class="text-2xl font-bold text-white mb-1">{{ config.eventName }}</h1>
+          <p class="text-slate-300 text-sm">{{ config.eventLocation }} • {{ config.eventDates }}</p>
         </div>
-      </div>
-      
-      <div v-if="testResult.htmlPreview" class="html-preview-section">
-        <h4>Raw HTML (first 1500 chars):</h4>
-        <div class="code-block">{{ testResult.htmlPreview }}</div>
-      </div>
-    </div>
-
-    <!-- Flip card (working version) -->
-    <div v-if="seriesData.length" class="flip-container">
-      <div class="flip-card" :class="{ flipped }" @click="flipped = !flipped">
-        <div class="front">
-          <h3>NORTHSTAR Results</h3>
-          <div v-if="northstarFound" class="stats">
-            <div class="stat">Position: {{ northstarData.position }}</div>
-            <div class="stat">Total: {{ northstarData.total }}</div>
-            <div class="stat">Races: {{ raceScores }}</div>
+        <div class="text-right">
+          <div class="text-xs text-slate-400">Last Update</div>
+          <div class="text-sm font-mono">{{ lastUpdate.toLocaleTimeString() }}</div>
+          <div class="inline-flex items-center mt-1">
+            <div class="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
+            <span class="text-xs text-green-400">Live</span>
           </div>
-          <p class="hint">Click to see all {{ seriesData.length }} boats</p>
         </div>
-        <div class="back">
-          <h3>All {{ seriesData.length }} Boats</h3>
-          <table>
-            <tr><th>Pos</th><th>Name</th><th>Sail</th><th>Type</th><th>Owner</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>Total</th></tr>
-            <tr v-for="boat in seriesData" :key="boat.position" 
-                :class="{ northstar: boat.name.toUpperCase().includes('NORTHSTAR') }">
-              <td>{{ boat.position }}</td>
-              <td>{{ boat.name }}</td>
-              <td>{{ boat.sailNo }}</td>
-              <td>{{ boat.type }}</td>
-              <td>{{ boat.owner }}</td>
-              <td>{{ boat.races?.R1 || '–' }}</td>
-              <td>{{ boat.races?.R2 || '–' }}</td>
-              <td>{{ boat.races?.R3 || '–' }}</td>
-              <td>{{ boat.races?.R4 || '–' }}</td>
-              <td>{{ boat.total }}</td>
-            </tr>
-          </table>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div v-if="loading" class="flex items-center justify-center min-h-64">
+      <div class="text-white text-xl">Loading regatta data...</div>
+    </div>
+
+    <div v-else>
+      <!-- Latest Race Results Card -->
+      <div class="mb-6">
+        <h2 class="text-lg font-semibold mb-3 text-slate-300">LATEST RACE - R{{ availableRaces.length }} RESULTS</h2>
+        <div class="perspective-1000">
+          <div 
+            :class="['flip-card', { 'flipped': flippedCards.latestRace }]"
+            @click="toggleCard('latestRace')"
+          >
+            <div class="flip-card-inner">
+              <!-- Front Side -->
+              <div class="flip-card-front bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl p-6 border border-slate-600">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-xl font-bold">Race R{{ availableRaces.length }}</h3>
+                  <span class="text-sm text-slate-400">Today</span>
+                </div>
+                
+                <div v-if="latestRaceResult" class="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div class="text-slate-400 text-sm mb-1">Position</div>
+                    <div class="text-3xl font-bold text-blue-400">{{ latestRaceResult.position }}</div>
+                  </div>
+                  <div>
+                    <div class="text-slate-400 text-sm mb-1">Delta Ahead</div>
+                    <div class="text-lg font-mono text-orange-400">+{{ latestRaceResult.delta }}</div>
+                  </div>
+                  <div>
+                    <div class="text-slate-400 text-sm mb-1">Corrected</div>
+                    <div class="text-lg font-mono text-green-400">{{ latestRaceResult.correctedTime }}</div>
+                  </div>
+                </div>
+                <div v-else class="text-center text-slate-400">No race data available</div>
+                
+                <div class="text-xs text-slate-500 text-center mt-4">Tap for full race results</div>
+              </div>
+
+              <!-- Back Side -->
+              <div class="flip-card-back bg-slate-800 rounded-xl p-4 border border-slate-600 overflow-hidden">
+                <h3 class="text-lg font-bold mb-3">Race R{{ availableRaces.length }} - Full Results</h3>
+                <div class="overflow-y-auto max-h-80">
+                  <table class="w-full text-xs">
+                    <thead class="sticky top-0 bg-slate-700">
+                      <tr>
+                        <th class="text-left p-2">Pos</th>
+                        <th class="text-left p-2">Yacht</th>
+                        <th class="text-left p-2">Corrected</th>
+                        <th class="text-left p-2">Delta</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(boat, idx) in latestRaceResults" 
+                          :key="idx" 
+                          :class="isMyBoat(boat.name) ? 'bg-blue-900/50' : 'hover:bg-slate-700/50'"
+                      >
+                        <td class="p-2 font-bold">{{ boat.position }}</td>
+                        <td class="p-2">
+                          <div class="font-semibold">{{ boat.name }}</div>
+                          <div class="text-slate-400 text-xs">{{ boat.sailNo }}</div>
+                        </td>
+                        <td class="p-2 font-mono">{{ boat.correctedTime }}</td>
+                        <td class="p-2 font-mono">{{ boat.delta }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <!-- Series Overall Results Card -->
+      <div class="mb-6">
+        <h2 class="text-lg font-semibold mb-3 text-slate-300">SERIES RESULTS OVERALL</h2>
+        <div class="perspective-1000">
+          <div 
+            :class="['flip-card', { 'flipped': flippedCards.overall }]"
+            @click="toggleCard('overall')"
+          >
+            <div class="flip-card-inner">
+              <!-- Front Side -->
+              <div class="flip-card-front bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl p-6 border border-slate-600">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-xl font-bold">{{ config.classId }} Class</h3>
+                  <span class="text-sm text-slate-400">{{ availableRaces.length }} races</span>
+                </div>
+                
+                <div v-if="myBoat" class="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div class="text-slate-400 text-sm mb-1">Position</div>
+                    <div class="text-3xl font-bold text-blue-400">{{ myBoat.position }}</div>
+                  </div>
+                  <div>
+                    <div class="text-slate-400 text-sm mb-1">Total Points</div>
+                    <div class="text-2xl font-bold text-yellow-400">{{ myBoat.total }}</div>
+                  </div>
+                  <div>
+                    <div class="text-slate-400 text-sm mb-1">Net Points</div>
+                    <div class="text-2xl font-bold text-green-400">{{ myBoat.points }}</div>
+                  </div>
+                </div>
+                <div v-else class="text-center text-slate-400">No overall data available</div>
+                
+                <div class="text-xs text-slate-500 text-center mt-4">Tap for points breakdown</div>
+              </div>
+
+              <!-- Back Side -->
+              <div class="flip-card-back bg-slate-800 rounded-xl p-4 border border-slate-600 overflow-hidden">
+                <h3 class="text-lg font-bold mb-3">Overall Standings</h3>
+                <div class="overflow-y-auto max-h-80">
+                  <table class="w-full text-xs">
+                    <thead class="sticky top-0 bg-slate-700">
+                      <tr>
+                        <th class="text-left p-2">Pos</th>
+                        <th class="text-left p-2">Yacht</th>
+                        <th class="text-left p-2">R1</th>
+                        <th class="text-left p-2">R2</th>
+                        <th class="text-left p-2">R3</th>
+                        <th class="text-left p-2">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(boat, idx) in overallResults" 
+                          :key="idx" 
+                          :class="isMyBoat(boat.name) ? 'bg-blue-900/50' : 'hover:bg-slate-700/50'"
+                      >
+                        <td class="p-2 font-bold">{{ boat.position }}</td>
+                        <td class="p-2">
+                          <div class="font-semibold">{{ boat.name }}</div>
+                          <div class="text-slate-400 text-xs">{{ boat.sailNo }}</div>
+                        </td>
+                        <td class="p-2 font-mono">{{ boat.r1 }}</td>
+                        <td class="p-2 font-mono">{{ boat.r2 }}</td>
+                        <td class="p-2 font-mono">{{ boat.r3 }}</td>
+                        <td class="p-2 font-mono font-bold">{{ boat.total }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Race Details Cards -->
+      <div class="mb-6">
+        <h2 class="text-lg font-semibold mb-3 text-slate-300">RACE RESULT DETAILS</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div v-for="(raceId, index) in availableRaces" :key="raceId" class="perspective-1000">
+            <div 
+              :class="['flip-card', { 'flipped': flippedCards[`race-${raceId}`] }]"
+              @click="toggleCard(`race-${raceId}`)"
+            >
+              <div class="flip-card-inner">
+                <!-- Front Side -->
+                <div class="flip-card-front bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 border border-slate-600 min-h-32">
+                  <div class="text-center">
+                    <div class="text-slate-400 text-sm mb-1">Race R{{ index + 1 }}</div>
+                    <div class="text-2xl font-bold mb-2">{{ getMyRaceResult(raceId)?.position || '-' }}</div>
+                    <div v-if="getMyRaceResult(raceId)">
+                      <div class="text-xs text-slate-300">Finish: {{ getMyRaceResult(raceId).finishTime }}</div>
+                      <div class="text-xs text-slate-400">{{ getMyRaceResult(raceId).delta }} behind</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Back Side -->
+                <div class="flip-card-back bg-slate-800 rounded-lg p-3 border border-slate-600 overflow-hidden min-h-32">
+                  <h4 class="font-bold mb-2 text-sm">Race R{{ index + 1 }}</h4>
+                  <div class="overflow-y-auto max-h-24">
+                    <table class="w-full text-xs">
+                      <tbody>
+                        <tr v-for="(boat, idx) in (raceResults[raceId] || []).slice(0, 3)" 
+                            :key="idx" 
+                            :class="isMyBoat(boat.name) ? 'bg-blue-900/50' : ''"
+                        >
+                          <td class="py-1 font-bold w-6">{{ boat.position }}</td>
+                          <td class="py-1 text-xs truncate">{{ boat.name }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="text-center text-slate-500 text-xs mt-8">
+        <p>Last updated: {{ lastUpdate.toLocaleTimeString() }}</p>
+        <button 
+          @click="fetchData"
+          class="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm transition-colors"
+        >
+          Refresh Data
+        </button>
       </div>
     </div>
   </div>
 </template>
 
-<script setup>
-import { ref, computed } from 'vue'
-
-const seriesData = ref([])
-const flipped = ref(false)
-const testResult = ref(null)
-const lastTest = ref(null)
-
-const northstarData = computed(() => 
-  seriesData.value.find(boat => boat.name.toUpperCase().includes('NORTHSTAR'))
-)
-
-const northstarFound = computed(() => !!northstarData.value)
-
-const raceScores = computed(() => {
-  if (!northstarData.value?.races) return 'None'
-  return Object.entries(northstarData.value.races)
-    .map(([race, score]) => `${race}:${score}`)
-    .join(', ')
-})
-
-async function testM2() {
-  lastTest.value = 'M2'
-  testResult.value = null
-  
-  try {
-    console.log('🟡 Testing M2 class...')
-    const response = await fetch('/api/orc-proxy?type=series&eventId=xolfq&classId=M2&debug=true')
-    
-    if (response.ok) {
-      const result = await response.json()
-      console.log('M2 result:', result)
+<script>
+export default {
+  name: 'Results',
+  data() {
+    return {
+      overallResults: [],
+      raceResults: {},
+      availableRaces: [],
+      loading: true,
+      lastUpdate: new Date(),
+      flippedCards: {},
       
-      testResult.value = {
+      // Configuration - update these for different events
+      config: {
+        eventId: 'xolfq',
         classId: 'M2',
-        url: result.meta?.url,
-        success: result.success,
-        boatsFound: result.data?.length || 0,
-        htmlLength: result.html?.length || 0,
-        hasNorthstar: result.html?.includes('NORTHSTAR') || false,
-        hasPipes: result.html?.includes('|') || false,
-        northstarLines: result.html?.split('\n').filter(line => line.toUpperCase().includes('NORTHSTAR')) || [],
-        htmlPreview: result.html?.substring(0, 1500) || 'No HTML'
-      }
-      
-      if (result.data?.length > 0) {
-        seriesData.value = result.data
-        console.log('✅ M2 has boats! Loaded:', result.data.length)
-      }
-      
-    } else {
-      console.log('❌ M2 test failed:', response.status)
-      testResult.value = {
-        classId: 'M2',
-        success: false,
-        error: `HTTP ${response.status}`
+        eventName: 'Maxi Yacht Rolex Cup 2024',
+        eventLocation: 'Porto Cervo',
+        eventDates: '9/9/2024 - 14/9/2024'
       }
     }
-  } catch (err) {
-    console.log('❌ M2 test error:', err)
-    testResult.value = {
-      classId: 'M2', 
-      success: false,
-      error: err.message
+  },
+  
+  computed: {
+    myBoat() {
+      return this.overallResults.find(boat => 
+        boat.name.toUpperCase().includes('NORTHSTAR')
+      );
+    },
+    
+    latestRaceResult() {
+      const latestRaceId = this.availableRaces[this.availableRaces.length - 1];
+      if (latestRaceId && this.raceResults[latestRaceId]) {
+        return this.raceResults[latestRaceId].find(boat => 
+          boat.name.toUpperCase().includes('NORTHSTAR')
+        );
+      }
+      return null;
+    },
+    
+    latestRaceResults() {
+      const latestRaceId = this.availableRaces[this.availableRaces.length - 1];
+      return this.raceResults[latestRaceId] || [];
+    }
+  },
+  
+  methods: {
+    toggleCard(cardId) {
+      this.$set(this.flippedCards, cardId, !this.flippedCards[cardId]);
+    },
+    
+    isMyBoat(boatName) {
+      return boatName.toUpperCase().includes('NORTHSTAR');
+    },
+    
+    getMyRaceResult(raceId) {
+      if (this.raceResults[raceId]) {
+        return this.raceResults[raceId].find(boat => 
+          boat.name.toUpperCase().includes('NORTHSTAR')
+        );
+      }
+      return null;
+    },
+    
+    async fetchData() {
+      this.loading = true;
+      try {
+        // Fetch overall results
+        const overallResponse = await fetch(`/api/results-orc?type=overall&eventId=${this.config.eventId}&classId=${this.config.classId}`);
+        const overallData = await overallResponse.json();
+        if (overallData.success) {
+          this.overallResults = overallData.results;
+        }
+
+        // Fetch race results for races 6, 12, 13 (adjust as needed)
+        const raceIds = ['6', '12', '13']; // Example race IDs - update based on your event
+        const racePromises = raceIds.map(async (raceId) => {
+          const response = await fetch(`/api/results-orc?type=race&eventId=${this.config.eventId}&raceId=${raceId}`);
+          const data = await response.json();
+          return { raceId, data: data.success ? data.results : [] };
+        });
+
+        const raceData = await Promise.all(racePromises);
+        const raceResultsObj = {};
+        raceData.forEach(({ raceId, data }) => {
+          raceResultsObj[raceId] = data;
+        });
+        this.raceResults = raceResultsObj;
+        this.availableRaces = raceIds;
+
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        this.loading = false;
+        this.lastUpdate = new Date();
+      }
+    }
+  },
+  
+  mounted() {
+    this.fetchData();
+    // Update every 30 seconds
+    this.refreshInterval = setInterval(this.fetchData, 30000);
+  },
+  
+  beforeDestroy() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
     }
   }
-}
-
-async function testIRC72() {
-  lastTest.value = 'IRC72'
-  testResult.value = null
-  
-  try {
-    console.log('🟠 Testing IRC72 class...')
-    const response = await fetch('/api/orc-proxy?type=series&eventId=xolfq&classId=IRC72&debug=true')
-    
-    if (response.ok) {
-      const result = await response.json()
-      console.log('IRC72 result:', result)
-      
-      testResult.value = {
-        classId: 'IRC72',
-        url: result.meta?.url,
-        success: result.success,
-        boatsFound: result.data?.length || 0,
-        htmlLength: result.html?.length || 0,
-        hasNorthstar: result.html?.includes('NORTHSTAR') || false,
-        hasPipes: result.html?.includes('|') || false,
-        northstarLines: result.html?.split('\n').filter(line => line.toUpperCase().includes('NORTHSTAR')) || [],
-        htmlPreview: result.html?.substring(0, 1500) || 'No HTML'
-      }
-      
-      if (result.data?.length > 0) {
-        seriesData.value = result.data
-        console.log('✅ IRC72 has boats! Loaded:', result.data.length)
-      }
-      
-    } else {
-      console.log('❌ IRC72 test failed:', response.status)
-      testResult.value = {
-        classId: 'IRC72',
-        success: false,
-        error: `HTTP ${response.status}`
-      }
-    }
-  } catch (err) {
-    console.log('❌ IRC72 test error:', err)
-    testResult.value = {
-      classId: 'IRC72',
-      success: false,
-      error: err.message
-    }
-  }
-}
-
-function loadSample() {
-  seriesData.value = [
-    {
-      position: "1", nation: "USA", name: "PROTEUS", sailNo: "USA60722", type: "IRC 72",
-      owner: "George & Christina Sakellaris", club: "New York YC", class: "M2",
-      total: 8, races: { R1: 2, R2: 1, R3: 4, R4: 1 }
-    },
-    {
-      position: "2", nation: "GBR", name: "JOLT", sailNo: "GBR7237", type: "IRC 72", 
-      owner: "Peter Harrison", club: "YC Costa Smeralda", class: "M2",
-      total: 8, races: { R1: 1, R2: 3, R3: 2, R4: 2 }
-    },
-    {
-      position: "3", nation: "GBR", name: "NORTHSTAR OF LONDON", sailNo: "GBR72X", type: "IRC 72",
-      owner: "Peter Dubens", club: "YC Costa Smeralda / Royal Thames YC", class: "M2", 
-      total: 12, races: { R1: 4, R2: 2, R3: 1, R4: "5 RET" }
-    },
-    {
-      position: "4", nation: "GBR", name: "JETHOU", sailNo: "GBR74R", type: "IRC 77",
-      owner: "Sir Peter Ogden", club: "Royal Yacht Squadron", class: "M2",
-      total: 13, races: { R1: 3, R2: 4, R3: 3, R4: 3 }
-    }
-  ]
-  lastTest.value = 'Sample Data'
-  testResult.value = null
-  console.log('✅ Sample data loaded - 4 boats')
 }
 </script>
 
 <style scoped>
-.debug-page {
-  padding: 30px;
-  color: #fff;
-  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-  min-height: 100vh;
-}
-
-.big-buttons {
-  display: flex;
-  gap: 20px;
-  margin: 30px 0;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.big-btn {
-  padding: 20px 30px;
-  border: none;
-  border-radius: 12px;
-  color: white;
-  cursor: pointer;
-  font-size: 1.2rem;
-  font-weight: bold;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  min-width: 200px;
-  transition: transform 0.2s;
-}
-
-.big-btn:hover {
-  transform: translateY(-2px);
-}
-
-.big-btn.m2 { background: linear-gradient(45deg, #cc9900, #ffcc33); }
-.big-btn.irc72 { background: linear-gradient(45deg, #ff6600, #ff9933); }
-.big-btn.sample { background: linear-gradient(45deg, #00aa55, #33cc66); }
-
-.status-info {
-  margin: 30px 0;
-}
-
-.status-box {
-  background: rgba(255,255,255,.15);
-  padding: 25px;
-  border-radius: 15px;
-  border: 2px solid rgba(255,255,255,.3);
-}
-
-.status-box h3 {
-  margin-top: 0;
-  color: #00ffaa;
-}
-
-.status-box p {
-  margin: 12px 0;
-  font-size: 1.1rem;
-  font-family: monospace;
-}
-
-.test-results {
-  background: rgba(0,0,0,.2);
-  padding: 25px;
-  border-radius: 15px;
-  margin: 30px 0;
-  border: 2px solid rgba(255,255,255,.2);
-}
-
-.test-info {
-  background: rgba(255,255,255,.1);
-  padding: 20px;
-  border-radius: 10px;
-  margin: 15px 0;
-}
-
-.test-info p {
-  margin: 8px 0;
-  font-family: monospace;
-  font-size: 1rem;
-}
-
-.northstar-lines, .html-preview-section {
-  background: rgba(255,255,255,.05);
-  padding: 20px;
-  border-radius: 10px;
-  margin: 15px 0;
-}
-
-.code-block {
-  background: rgba(0,0,0,.4);
-  padding: 15px;
-  border-radius: 8px;
-  font-family: monospace;
-  font-size: 0.85rem;
-  white-space: pre-wrap;
-  max-height: 300px;
-  overflow: auto;
-  border: 1px solid rgba(255,255,255,.3);
-}
-
-.flip-container {
-  margin: 30px 0;
-  max-width: 900px;
+.perspective-1000 {
+  perspective: 1000px;
 }
 
 .flip-card {
-  position: relative;
   width: 100%;
-  height: 400px;
-  perspective: 1200px;
+  height: auto;
   cursor: pointer;
 }
 
-.front, .back {
-  position: absolute;
+.flip-card-inner {
+  position: relative;
   width: 100%;
-  height: 100%;
-  backface-visibility: hidden;
-  border-radius: 16px;
-  background: rgba(255,255,255,.15);
-  border: 3px solid rgba(255,255,255,.4);
-  backdrop-filter: blur(20px);
-  padding: 25px;
-  transition: transform 0.8s ease;
-  box-shadow: 0 15px 35px rgba(0,0,0,.3);
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
 }
 
-.front {
-  transform: rotateY(0deg);
-}
-
-.back {
+.flip-card.flipped .flip-card-inner {
   transform: rotateY(180deg);
-  overflow-y: auto;
 }
 
-.flip-card.flipped .front {
-  transform: rotateY(-180deg);
-}
-
-.flip-card.flipped .back {
-  transform: rotateY(0deg);
-}
-
-.stats {
-  margin: 20px 0;
-}
-
-.stat {
-  background: rgba(0,255,170,.2);
-  padding: 15px;
-  border-radius: 10px;
-  margin: 10px 0;
-  font-size: 1.2rem;
-  font-weight: bold;
-  text-align: center;
-}
-
-.hint {
-  text-align: center;
-  opacity: 0.8;
-  margin-top: 20px;
-  font-size: 1.1rem;
-}
-
-table {
+.flip-card-front, .flip-card-back {
+  position: relative;
   width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
-th, td {
-  padding: 8px 10px;
-  text-align: left;
-  border-bottom: 1px solid rgba(255,255,255,.2);
-  white-space: nowrap;
-}
-
-th {
-  background: rgba(255,255,255,.2);
-  font-weight: bold;
-}
-
-.northstar {
-  background: rgba(0,255,170,.4) !important;
-  border-left: 4px solid #00ffaa;
-}
-
-h1, h3, h4 {
-  margin-top: 0;
+.flip-card-back {
+  transform: rotateY(180deg);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
 }
 </style>
