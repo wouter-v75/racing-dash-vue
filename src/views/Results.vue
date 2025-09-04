@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen relative overflow-hidden">
-    <!-- Dynamic Background -->
+    <!-- Dynamic Background New-->
     <div 
       class="absolute inset-0 bg-cover bg-center bg-no-repeat"
       :style="{ backgroundImage: `url(${currentBackground})` }"
