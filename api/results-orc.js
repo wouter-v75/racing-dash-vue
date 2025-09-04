@@ -1,216 +1,170 @@
-// api/results-orc.js
-export const runtime = 'nodejs'
+/* ---------- Updated Race Parsing Functions for api/results-orc.js ---------- */
+/* Replace the existing race parsing functions with these updated versions */
 
-export default async function handler(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-  if (req.method === 'OPTIONS') return res.status(200).end()
-
-  try {
-    const q = req.query || {}
-    const type = String(q.type || 'overall')
-    const eventId = String(q.eventId || '')
-    const classId = q.classId != null ? String(q.classId) : ''
-    const raceId = q.raceId != null ? String(q.raceId) : ''
-
-    if (type === 'ping') {
-      return res.status(200).json({ ok: true, runtime, node: process.versions?.node, time: new Date().toISOString() })
-    }
-
-    if (!eventId && type !== 'ping') {
-      return res.status(400).json({ success: false, message: 'Missing eventId' })
-    }
-
-    // Debug parsing with safe minimal approach
-    if (type === 'debug-parse') {
-      if (!classId) return res.status(400).json({ success: false, message: 'Missing classId for debug-parse' })
-      
-      try {
-        const html = await fetchText(seriesUrl(eventId, classId))
-        
-        // Simple debug info
-        const debug = {
-          htmlLength: html.length,
-          containsNorthstar: html.includes('NORTHSTAR'),
-          hasDataClass: html.includes('class="data"'),
-          dataClassCount: (html.match(/class="data"/gi) || []).length
-        }
-
-        // Parse with minimal approach
-        const results = parseSimpleOverall(html)
-        debug.parsedCount = results.length
-        debug.results = results
-        
-        // Find NORTHSTAR safely
-        const northstar = results.find(r => 
-          (r.name || '').toUpperCase().includes('NORTHSTAR')
-        )
-        debug.northstarFound = !!northstar
-        if (northstar) debug.northstarData = northstar
-
-        return res.status(200).json({
-          success: true,
-          resultType: 'debug-parse', 
-          debug,
-          meta: { eventId, classId }
-        })
-      } catch (err) {
-        return res.status(500).json({
-          success: false,
-          error: err.message
-        })
-      }
-    }
-
-    // Other endpoints...
-    if (type === 'overall') {
-      const cls = classId || (await autoFirstClass(eventId))
-      if (!cls) return ok(res, 'overall', [], { eventId, classId: null })
-      
-      const html = await fetchText(seriesUrl(eventId, cls))
-      const rows = safeParse(parseSimpleOverall, html)
-      return ok(res, 'overall', rows, { eventId, classId: cls })
-    }
-
-    return res.status(400).json({ success: false, message: 'Unknown type' })
-
-  } catch (e) {
-    console.error('ORC handler error:', e)
-    return res.status(500).json({ 
-      success: false, 
-      message: e?.message || 'Internal server error'
-    })
-  }
-}
-
-/* ---------- URLs ---------- */
-const indexUrl = (eventId) => `https://data.orc.org/public/WEV.dll?action=index&eventid=${encodeURIComponent(eventId)}`
-const seriesUrl = (eventId, cls) => `https://data.orc.org/public/WEV.dll?action=series&eventid=${encodeURIComponent(eventId)}&classid=${encodeURIComponent(cls)}`
-
-/* ---------- HTTP ---------- */
-async function fetchText(url) {
-  const r = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; racingdash/1.0)',
-      'Accept': 'text/html,application/xhtml+xml'
-    }
-  })
-  if (!r.ok) throw new Error(`Fetch failed ${r.status} for ${url}`)
-  return r.text()
-}
-
-function ok(res, resultType, results, meta = {}) {
-  return res.status(200).json({ 
-    success: true, 
-    resultType, 
-    results, 
-    meta, 
-    lastUpdated: new Date().toISOString() 
-  })
-}
-
-function safeParse(fn, html) {
-  try { 
-    return fn(html) 
-  } catch (e) {
-    console.error(`parse error in ${fn.name}:`, e)
-    return []
-  }
-}
-
-/* ---------- Simple parsing based on your debug results ---------- */
-function parseSimpleOverall(html, debug = false) {
-  const results = []
+function parseRaceForClass(htmlRaw) {
+  // Use the same successful parsing method as series results
+  const results = [];
   
   try {
-    // Find all data rows
-    const tableRowRegex = /<tr\s+class="data"[^>]*>.*?<\/tr>/gis
-    const matches = html.match(tableRowRegex)
+    // Parse individual race results table with corrected times
+    const tableRowRegex = /<tr[^>]*>.*?<\/tr>/gis;
+    const matches = htmlRaw.match(tableRowRegex);
     
     if (!matches) {
-      console.log('No data rows found')
-      return results
+      console.log('No table rows found in race results');
+      return results;
     }
 
-    for (let i = 0; i < matches.length; i++) {
-      const row = matches[i]
-      const cellRegex = /<td[^>]*>(.*?)<\/td>/gis
-      const cells = []
-      let cellMatch
+    for (const row of matches) {
+      const cellRegex = /<td[^>]*>(.*?)<\/td>/gis;
+      const cells = [];
+      let cellMatch;
       
       while ((cellMatch = cellRegex.exec(row)) !== null) {
-        // Clean the cell content
-        const cellText = cellMatch[1]
-          .replace(/<[^>]*>/g, '')  // Remove HTML tags
-          .replace(/&amp;/g, '&')  // Decode HTML entities
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/\s+/g, ' ')    // Normalize whitespace
-          .trim()
-        cells.push(cellText)
+        const cellText = cellMatch[1].replace(/<[^>]*>/g, '').trim();
+        cells.push(cellText);
       }
       
-      // Parse based on actual column count (13 columns total based on image)
-      if (cells.length >= 6) {
-        const position = cells[0] || ''
+      // Skip header rows and empty rows
+      if (cells.length >= 4 && cells[0] && !isNaN(parseInt(cells[0]))) {
+        // Standard race results format: Pos, Name, Sail No, Skipper, Finish Time, Elapsed, Corrected, etc.
+        const result = {
+          position: cells[0],
+          name: cells[1] || 'Unknown',
+          sailNo: cells[2] || '',
+          skipper: cells[3] || '',
+          finishTime: cells[4] || '',
+          elapsed: cells[5] || '',
+          correctedTime: cells[6] || ''
+        };
+
+        // Add additional fields if they exist
+        if (cells[7]) result.penalty = cells[7];
+        if (cells[8]) result.points = cells[8];
         
-        // Only process if position is numeric
-        if (position && !isNaN(parseInt(position, 10))) {
-          const result = {
-            position: position,
-            name: cells[2] || '',      // Column 2: Yacht Name ✓
-            sailNo: cells[3] || '',    // Column 3: Sail No ✓  
-            skipper: cells[5] || '',   // Column 5: Owner ✓
-            
-            // Based on table image: Points should be in LAST column (Total)
-            points: cells[cells.length - 1] || '', // Last column = Total points
-            total: cells[cells.length - 1] || '',  // Last column = Total points
-            
-            // Add race scores if available (columns 8-11)
-            r1: cells.length > 8 ? cells[8] : '',
-            r2: cells.length > 9 ? cells[9] : '',
-            r3: cells.length > 10 ? cells[10] : '',
-            r4: cells.length > 11 ? cells[11] : ''
-          }
-          
-          // Always include debug info when in debug mode
-          if (debug) {
-            result.debug_allCells = cells
-            result.debug_cellCount = cells.length
-            result.debug_lastCell = cells[cells.length - 1]
-          }
-          
-          results.push(result)
+        results.push(result);
+      }
+      
+      // Handle DNF/DNS entries which might have fewer columns
+      else if (cells.length >= 3 && cells[0] && !isNaN(parseInt(cells[0]))) {
+        // Check if any cell contains DNF, DNS, DSQ, etc.
+        const hasStatus = cells.some(cell => /^(DNF|DNS|DSQ|DNC|RET)$/i.test(cell));
+        if (hasStatus) {
+          results.push({
+            position: cells[0],
+            name: cells[1] || 'Unknown',
+            sailNo: cells[2] || '',
+            skipper: cells[3] || '',
+            finishTime: 'DNF',
+            elapsed: 'DNF', 
+            correctedTime: 'DNF',
+            penalty: '0',
+            points: cells[cells.length - 1] || '6.00' // Points usually in last column
+          });
+        }
+      }
+    }
+    
+    // Calculate delta to first if we have corrected times
+    if (results.length > 0 && results[0].correctedTime && results[0].correctedTime !== 'DNF') {
+      const firstTime = results[0].correctedTime;
+      for (const result of results) {
+        if (result.correctedTime && result.correctedTime !== 'DNF') {
+          result.deltaToFirst = calculateTimeDelta(firstTime, result.correctedTime);
+        } else {
+          result.deltaToFirst = '–';
         }
       }
     }
     
   } catch (error) {
-    console.error('Error in parseSimpleOverall:', error)
+    console.error('Error parsing race results:', error);
   }
   
-  return results
+  return results;
 }
 
-/* ---------- Helpers ---------- */
-async function autoFirstClass(eventId) {
-  try {
-    const html = await fetchText(indexUrl(eventId))
-    // Simple class extraction
-    const classRegex = /classid=([A-Za-z0-9]+)/gi
-    const matches = []
-    let match
-    while ((match = classRegex.exec(html)) !== null) {
-      const id = match[1].trim()
-      if (id && !matches.includes(id)) matches.push(id)
-    }
-    return matches[0] || null
-  } catch (e) {
-    console.error('autoFirstClass error:', e)
-    return null
+function parseRaceChooseClass(htmlRaw, wantClass) {
+  // Use the same successful parsing method, but handle multiple class sections
+  console.log(`Parsing race for class: ${wantClass || 'any'}`);
+  
+  if (!wantClass) {
+    // No class preference → parse the entire page
+    return parseRaceForClass(htmlRaw);
   }
+  
+  const html = decodeEntities(htmlRaw);
+  
+  // Find the section for the desired class
+  const anchorRe = new RegExp(`action=series[^"'>]*classid=${escapeRegex(wantClass)}`, 'i');
+  const classPos = html.search(anchorRe);
+  
+  if (classPos < 0) {
+    console.log(`No section found for class ${wantClass}, parsing entire page`);
+    return parseRaceForClass(htmlRaw);
+  }
+  
+  // Find the next class section to determine the boundary
+  const nextClassRe = new RegExp("action=series[^\"'>]*classid=([A-Za-z0-9]+)", "gi");
+  nextClassRe.lastIndex = classPos + 1;
+  const nextMatch = nextClassRe.exec(html);
+  
+  const endPos = nextMatch ? nextMatch.index : html.length;
+  const classSection = html.slice(classPos, endPos);
+  
+  console.log(`Found class section for ${wantClass}, length: ${classSection.length}`);
+  
+  // Parse the class section using the working method
+  return parseRaceForClass(classSection);
+}
+
+// Helper function to calculate time deltas (improved version)
+function calculateTimeDelta(firstTime, currentTime) {
+  if (!firstTime || !currentTime || firstTime === 'DNF' || currentTime === 'DNF') {
+    return '–';
+  }
+  
+  const timeToSeconds = (timeStr) => {
+    if (!timeStr) return null;
+    const parts = timeStr.split(':').map(Number);
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2]; // HH:MM:SS
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1]; // MM:SS
+    }
+    return null;
+  };
+  
+  const first = timeToSeconds(firstTime);
+  const current = timeToSeconds(currentTime);
+  
+  if (first === null || current === null) return '–';
+  
+  const deltaSeconds = Math.max(0, current - first);
+  const minutes = Math.floor(deltaSeconds / 60);
+  const seconds = deltaSeconds % 60;
+  
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+/* ---------- Update the main handler to use new parsing ---------- */
+
+// In your main handler function, update these sections:
+
+// RACE for a class (URL contains classId)
+if (type === 'race') {
+  if (!raceId) return res.status(400).json({ success:false, message:'Missing raceId' })
+  const cls = classId || (await autoFirstClass(eventId))
+  if (!cls) return ok(res, 'race', [], { eventId, classId: null, raceId })
+  const html = await fetchText(raceUrl(eventId, cls, raceId))
+  const rows = safeParse(parseRaceForClass, html)  // Using updated parsing method
+  return ok(res, 'race', rows, { eventId, classId: cls, raceId })
+}
+
+// RACE page without class in URL
+if (type === 'raceRaw') {
+  if (!raceId) return res.status(400).json({ success:false, message:'Missing raceId' })
+  const html = await fetchText(raceUrlRaw(eventId, raceId))
+  const rows = safeParse(h => parseRaceChooseClass(h, classId || ''), html)  // Using updated parsing method
+  return ok(res, 'race', rows, { eventId, classId: classId || null, raceId })
 }
