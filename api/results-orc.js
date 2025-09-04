@@ -74,9 +74,22 @@ export default async function handler(req, res) {
       return ok(res, 'overall', rows, { eventId, classId: cls })
     }
 
-    // NEW: Minimal race test - just add these 3 lines
+    // NEW: Test race fetching
     if (type === 'race') {
-      return res.status(200).json({ success: true, message: 'Race endpoint reached', raceId })
+      if (!raceId) return res.status(400).json({ success: false, message: 'Missing raceId' })
+      
+      const html = await fetchText(raceUrl(eventId, raceId))
+      
+      // Just return basic info about the HTML, no parsing yet
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Race HTML fetched', 
+        raceId,
+        htmlLength: html.length,
+        containsNorthstar: html.includes('NORTHSTAR'),
+        hasDataClass: html.includes('class="data"'),
+        dataClassCount: (html.match(/class="data"/gi) || []).length
+      })
     }
 
     return res.status(400).json({ success: false, message: 'Unknown type' })
