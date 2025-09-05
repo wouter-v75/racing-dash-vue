@@ -383,7 +383,18 @@ const evId = () => currentEvent.value?.event_id || ''
 
 const lastRaceId = computed(() => {
   const forcedLastRaceByEvent = { xolfq: '13' }
-  return forcedLastRaceByEvent[evId()] || (races.value.at(-1)?.id || '')
+  const forced = forcedLastRaceByEvent[evId()]
+  const available = races.value.at(-1)?.id || ''
+  
+  console.log('Last Race ID calculation:', {
+    eventId: evId(),
+    forcedRace: forced,
+    availableRaces: races.value.map(r => r.id),
+    lastAvailable: available,
+    finalChoice: forced || available
+  })
+  
+  return forced || available
 })
 
 const lastRaceTitle = computed(() => 
