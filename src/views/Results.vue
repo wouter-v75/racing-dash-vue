@@ -394,9 +394,16 @@ const otherRaces = computed(() =>
   races.value.filter(r => r.id !== lastRaceId.value)
 )
 
-const myOverall = computed(() => 
-  overallRows.value.find(r => isMyBoat(r.name))
-)
+const myOverall = computed(() => {
+  const found = overallRows.value.find(r => isMyBoat(r.name))
+  console.log('myOverall computation:', {
+    myBoatName: myBoatName.value,
+    totalBoats: overallRows.value.length,
+    boatNames: overallRows.value.map(r => r.name),
+    foundBoat: found?.name || 'NOT FOUND'
+  })
+  return found
+})
 
 const lastRaceSummary = ref({ 
   position: '–', 
