@@ -121,24 +121,37 @@
 
     <!-- SIMPLE DEBUG SECTION -->
     <div style="margin: 20px; padding: 20px; background: rgba(255,0,0,0.2); border: 2px solid red; border-radius: 10px;">
-      <h3 style="color: yellow;">🚨 DEBUG INFO</h3>
+      <h3 style="color: yellow;">🚨 DEBUG INFO - WORKING PARSER</h3>
       <div style="font-family: monospace; font-size: 12px; color: white;">
         <div><strong>My Boat Name:</strong> "{{ myBoatName }}"</div>
         <div><strong>Event ID:</strong> "{{ evId() }}"</div>
+        <div><strong>Class:</strong> "{{ HARDCODED_CLASS }}"</div>
         <div><strong>Overall Rows:</strong> {{ overallRows.length }}</div>
-        <div><strong>API Base:</strong> "{{ API_BASE }}"</div>
         <div><strong>Loading:</strong> {{ JSON.stringify(loading) }}</div>
         <div><strong>Error:</strong> {{ error || 'None' }}</div>
         
         <div v-if="overallRows.length > 0">
-          <strong>First 3 boats:</strong>
-          <div v-for="boat in overallRows.slice(0, 3)" :key="boat._key" style="margin: 2px 0;">
-            {{ boat.position }}. "{{ boat.name }}" - {{ isMyBoat(boat.name) ? 'MATCH!' : 'no match' }}
+          <strong>SUCCESS! Found {{ overallRows.length }} boats:</strong>
+          <div v-for="boat in overallRows.slice(0, 5)" :key="boat._key" style="margin: 2px 0; background: rgba(0,0,0,0.3); padding: 4px;">
+            {{ boat.position }}. "{{ boat.name }}" 
+            - R1:{{ boat.r1 || '–' }} R2:{{ boat.r2 || '–' }} R3:{{ boat.r3 || '–' }} 
+            - Total:{{ boat.total || '–' }}
+            - {{ isMyBoat(boat.name) ? '🎯 MATCH!' : '❌ no match' }}
           </div>
+          <div v-if="overallRows.length > 5">... and {{ overallRows.length - 5 }} more boats</div>
         </div>
         
-        <div v-if="myOverall">
-          <strong>My boat found:</strong> {{ myOverall.name }} (Position: {{ myOverall.position }})
+        <div v-if="myOverall" style="background: rgba(0,255,0,0.2); padding: 8px; margin: 8px 0;">
+          <strong>✅ MY BOAT FOUND:</strong><br>
+          Name: {{ myOverall.name }}<br>
+          Position: {{ myOverall.position }}<br>
+          Total: {{ myOverall.total }}<br>
+          Race Points: R1:{{ myOverall.r1 }} R2:{{ myOverall.r2 }} R3:{{ myOverall.r3 }}
+        </div>
+        
+        <div v-if="overallRows.length === 0" style="background: rgba(255,0,0,0.3); padding: 8px;">
+          <strong>❌ NO BOATS FOUND!</strong><br>
+          Check if the ORC URL is working or parser needs adjustment.
         </div>
       </div>
     </div>
@@ -281,7 +294,26 @@ async function reloadOverall() {
     
     console.log('Loading overall for event:', evId(), 'class:', HARDCODED_CLASS)
     
-    // Use the existing working API format
+    // First try the direct ORC URL approach like parseSimpleRace
+    const orcUrl = `https://data.orc.org/public/WEV.dll?action=series&eventid=${encodeURIComponent(evId())}&classid=${encodeURIComponent(HARDCODED_CLASS)}`
+    console.log('Direct ORC URL:', orcUrl)
+    
+    try {
+      // Try direct fetch to ORC (might have CORS issues)
+      const response = await fetch(orcUrl)
+      if (response.ok) {
+        const html = await response.text()
+        console.log('Got HTML directly from ORC, parsing...')
+        const results = parseOverallFromHTML(html)
+        overallRows.value = results.map((r, i) => ({ ...r, _key: 'ov' + i }))
+        console.log('Parsed', results.length, 'boats from direct HTML')
+        return
+      }
+    } catch (directError) {
+      console.log('Direct ORC fetch failed (expected CORS):', directError.message)
+    }
+    
+    // Fallback to our API proxy
     const json = await api(`/api/results-orc?type=overall&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(HARDCODED_CLASS)}`)
     
     console.log('Overall API response:', json)
@@ -302,6 +334,66 @@ async function reloadOverall() {
   } finally {
     loading.value.overall = false
   }
+}
+
+// Use the working parser pattern from your orc-results.js
+function parseOverallFromHTML(html) {
+  const results = []
+  
+  try {
+    // Use the same approach as your working parseSimpleRace
+    const tableRowRegex = /<tr\s+class="data"[^>]*>.*?<\/tr>/gis
+    const matches = html.match(tableRowRegex)
+    
+    if (!matches) {
+      console.log('No data rows found in overall results')
+      return results
+    }
+    
+    for (let i = 0; i < matches.length; i++) {
+      const row = matches[i]
+      const cellRegex = /<td[^>]*>(.*?)<\/td>/gis
+      const cells = []
+      let cellMatch
+      
+      while ((cellMatch = cellRegex.exec(row)) !== null) {
+        const cellText = cellMatch[1]
+          .replace(/<[^>]*>/g, '')
+          .replace(/&amp;/g, '&')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/\s+/g, ' ')
+          .trim()
+        cells.push(cellText)
+      }
+      
+      // Map to overall standings structure (adjust column positions as needed)
+      if (cells.length >= 6) {
+        const position = cells[0] || ''
+        
+        if (position && !isNaN(parseInt(position, 10))) {
+          results.push({
+            position: cells[0],        // Position
+            nation: cells[1],          // Nation flag
+            name: cells[2],            // Boat name
+            sailNo: cells[3],          // Sail number
+            owner: cells[4],           // Owner/Skipper
+            points: cells[5],          // Points
+            total: cells[6] || cells[5] // Total points (fallback to points)
+          })
+        }
+      }
+    }
+    
+    console.log('parseOverallFromHTML extracted', results.length, 'boats')
+    
+  } catch (error) {
+    console.error('Error in parseOverallFromHTML:', error)
+  }
+  
+  return results
 }
 
 async function refreshData() {
