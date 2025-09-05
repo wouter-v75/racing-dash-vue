@@ -654,10 +654,9 @@ async function loadOtherRaceTables() {
 
 // Orchestration functions
 async function reloadClassData() {
-  await Promise.all([
-    reloadOverall(),
-    loadRacesForClass()
-  ])
+  // Load races first, then overall results with individual race points
+  await loadRacesForClass()
+  await reloadOverall()
   await reloadLastRace()
   await loadOtherRaceTables()
 }
