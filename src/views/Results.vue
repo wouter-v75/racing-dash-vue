@@ -1,7 +1,6 @@
 <template>
-  <!-- Results.vue -->
   <div class="results-page">
-    <!-- Background overlay -->
+    <!-- Results.vue Background overlay -->
     <div class="background-overlay" :style="backgroundStyle"></div>
     
     <!-- Admin controls -->
