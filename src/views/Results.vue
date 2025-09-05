@@ -1,157 +1,191 @@
 <template>
   <div class="results-page">
-    <div class="background-overlay" :style="backgroundStyle"></div>
-    
-    <div class="container">
-      <!-- Header -->
-      <div class="header">
-        <div class="header-top">
-          <h1 class="regatta-name">{{ currentEvent?.name || 'Maxi Worlds 2024' }}</h1>
-          <div class="last-update">
-            <div class="live-indicator"></div>
-            <span>{{ lastUpdateTime }}</span>
-          </div>
-        </div>
-        
-        <!-- Swipable Regatta Selector -->
-        <div class="regatta-selector">
-          <div class="regatta-scroll">
-            <button 
-              v-for="regatta in regattas" 
-              :key="regatta.id"
-              :class="['regatta-pill', { active: selectedRegattaId === regatta.id }]"
-              @click="selectRegatta(regatta.id)"
-            >
-              {{ regatta.name }}
-            </button>
-          </div>
-        </div>
-        
-        <div class="controls">
-          <button class="refresh-btn" @click="refreshData" :disabled="loading.any">
-            {{ loading.any ? '⏳' : '🔄' }}
-          </button>
-        </div>
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="left">
+        <label>Event</label>
+        <select v-model="selectedRegattaId" @change="reloadAll" :disabled="regattas.length===0">
+          <option disabled value="">— select event —</option>
+          <option v-for="r in regattas" :key="r.id" :value="r.id">
+            {{ r.name }} <span v-if="r.location">• {{ r.location }}</span>
+          </option>
+        </select>
 
-        <div v-if="myBoatName" class="boat-info">
-          <span class="boat-pill">{{ myBoatName }}</span>
-        </div>
+        <label v-if="classes.length">Class</label>
+        <select v-if="classes.length" v-model="selectedClassId">
+          <option v-for="c in classes" :key="c.id" :value="c.id">{{ c.id }}</option>
+        </select>
       </div>
 
-      <!-- Error display -->
-      <div v-if="error" class="error">{{ error }}</div>
+      <div class="right">
+        <a v-if="currentEvent?.event_url"
+           :href="currentEvent.event_url" target="_blank" rel="noopener"
+           class="btn link">Open event site</a>
+        <span class="pill" v-if="boatName">Boat: {{ boatName }}</span>
+        <button class="btn ghost" @click="reloadAll" :disabled="loading.any">Refresh</button>
+      </div>
+    </div>
 
-      <!-- Series Overall Section -->
-      <div class="section">
-        <h2 class="section-title">Series Results Overall</h2>
-        
-        <div class="flip-card-container">
-          <div class="flip-card" :class="{ flipped: overallFlipped }" @click="overallFlipped = !overallFlipped">
-            <!-- Front: NORTHSTAR specific data -->
-            <div class="flip-card-front">
-              <div class="race-header">
-                <div class="race-title">NORTHSTAR</div>
-                <div class="race-subtitle">M2 Class</div>
-              </div>
-              
-              <div v-if="loading.overall" class="loading">
-                <div class="spinner"></div>
-                Loading standings...
-              </div>
-              
-              <div v-else-if="myOverall" class="northstar-summary">
-                <div class="boat-name-display">{{ myOverall.name }}</div>
-                <div class="position-points-grid">
-                  <div class="stat-item">
-                    <div class="stat-value">{{ myOverall.position }}</div>
-                    <div class="stat-label">Position</div>
-                  </div>
-                  <div class="stat-item">
-                    <div class="stat-value">{{ myOverall.total || myOverall.points }}</div>
-                    <div class="stat-label">Total Points</div>
-                  </div>
-                </div>
-              </div>
-              
-              <div v-else class="empty-state">
-                <div>NORTHSTAR not found</div>
-                <div class="race-subtitle">Boat: "{{ myBoatName }}"</div>
-              </div>
-              
-              <div class="tap-hint">👆 Tap for full standings</div>
+    <p v-if="!selectedRegattaId" class="empty big">Choose an event to load results.</p>
+    <p v-if="err" class="error">{{ err }}</p>
+
+    <div v-if="selectedRegattaId">
+      <!-- OVERALL STANDINGS (top) -->
+      <div class="card">
+        <FlipCard>
+          <template #front>
+            <h3 class="card-title">Series Overall — {{ selectedClassId }}</h3>
+            <div v-if="loading.overall" class="empty">Loading…</div>
+            <div v-else-if="!overallRows.length" class="empty">No data.</div>
+            <div v-else class="stats">
+              <div class="stat"><div class="k">Position</div><div class="v">{{ myOverall?.position || '–' }}</div></div>
+              <div class="stat"><div class="k">Boat</div><div class="v">{{ myOverall?.name || 'Not found' }}</div></div>
+              <div class="stat"><div class="k">Points</div><div class="v">{{ myOverall?.points || '–' }}</div></div>
+              <div class="stat"><div class="k">Total</div><div class="v">{{ myOverall?.total || myOverall?.points || '–' }}</div></div>
             </div>
-            
-            <!-- Back: Full standings table -->
-            <div class="flip-card-back">
-              <div class="race-header">
-                <div class="race-title">M2 - Full Standings</div>
+            <p class="hint">Click card to flip</p>
+          </template>
+          <template #back>
+            <h3 class="card-title">Overall — standings ({{ selectedClassId }})</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>#</th><th>Boat</th><th>Sail #</th><th>Skipper</th><th>Pts</th><th>Total</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in overallRows" :key="row._key" :class="{me: isMe(row.name)}">
+                    <td>{{ row.position }}</td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.sailNo }}</td>
+                    <td>{{ row.skipper || row.owner }}</td>
+                    <td>{{ row.points }}</td>
+                    <td>{{ row.total }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </FlipCard>
+      </div>
+
+      <!-- LAST RACE -->
+      <div class="card">
+        <FlipCard>
+          <template #front>
+            <h3 class="card-title">Last race — {{ lastRaceTitle }}</h3>
+            <div v-if="loading.last" class="empty">Loading…</div>
+            <div v-else-if="!lastRaceRows.length" class="empty">No data.</div>
+            <div v-else class="stats">
+              <div class="stat"><div class="k">Position</div><div class="v">{{ lastRaceSummary.position }}</div></div>
+              <div class="stat"><div class="k">Finish</div><div class="v">{{ lastRaceSummary.finishTime }}</div></div>
+              <div class="stat"><div class="k">Δ to 1st</div><div class="v">{{ lastRaceSummary.deltaToFirst }}</div></div>
+              <div class="stat"><div class="k">Δ in front</div><div class="v">{{ lastRaceSummary.deltaAhead || '–' }}</div></div>
+              <div class="stat"><div class="k">Δ behind</div><div class="v">{{ lastRaceSummary.deltaBehind || '–' }}</div></div>
+            </div>
+            <p class="hint">Click card to flip</p>
+          </template>
+          <template #back>
+            <h3 class="card-title">{{ lastRaceTitle }} — full table</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th><th>Δ to first</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in lastRaceRows" :key="row._key" :class="{me: isMe(row.name)}">
+                    <td>{{ row.position }}</td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.finishTime }}</td>
+                    <td>{{ row.correctedTime }}</td>
+                    <td>{{ row.deltaToFirst }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </FlipCard>
+      </div>
+
+      <!-- OTHER RACES (bottom) -->
+      <div class="grid">
+        <div class="card" v-for="r in otherRaces" :key="r.id">
+          <FlipCard>
+            <template #front>
+              <h3 class="card-title">RACE {{ r.id }} — {{ selectedClassId }}</h3>
+              <div v-if="!raceTables[r.id]" class="empty">Loading…</div>
+              <div v-else class="stats">
+                <div class="stat"><div class="k">Position</div><div class="v">{{ raceSummaries[r.id]?.position || '–' }}</div></div>
+                <div class="stat"><div class="k">Finish</div><div class="v">{{ raceSummaries[r.id]?.finishTime || '–' }}</div></div>
+                <div class="stat"><div class="k">Δ to 1st</div><div class="v">{{ raceSummaries[r.id]?.deltaToFirst || '–' }}</div></div>
+                <div class="stat"><div class="k">Δ in front</div><div class="v">{{ raceSummaries[r.id]?.deltaAhead || '–' }}</div></div>
+                <div class="stat"><div class="k">Δ behind</div><div class="v">{{ raceSummaries[r.id]?.deltaBehind || '–' }}</div></div>
               </div>
-              
-              <div v-if="overallRows.length > 0" class="table-container">
-                <table class="results-table">
+              <p class="hint">Click card to flip</p>
+            </template>
+            <template #back>
+              <h3 class="card-title">RACE {{ r.id }} — full table</h3>
+              <div class="table-wrap">
+                <table>
                   <thead>
-                    <tr>
-                      <th>Pos</th>
-                      <th>Boat</th>
-                      <th>Total</th>
-                    </tr>
+                    <tr><th>#</th><th>Boat</th><th>Finish</th><th>Corrected</th><th>Δ to first</th></tr>
                   </thead>
                   <tbody>
-                    <tr 
-                      v-for="row in overallRows" 
-                      :key="row._key"
-                      :class="{ 'boat-highlight': isMyBoat(row.name) }"
-                    >
+                    <tr v-for="row in raceTables[r.id]" :key="row._key" :class="{me: isMe(row.name)}">
                       <td>{{ row.position }}</td>
                       <td>{{ row.name }}</td>
-                      <td>{{ row.total || row.points }}</td>
+                      <td>{{ row.finishTime }}</td>
+                      <td>{{ row.correctedTime }}</td>
+                      <td>{{ row.deltaToFirst }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              
-              <div v-else class="empty-state">
-                No standings available
-              </div>
-            </div>
-          </div>
+            </template>
+          </FlipCard>
         </div>
       </div>
     </div>
 
-    <!-- SIMPLE DEBUG SECTION -->
-    <div style="margin: 20px; padding: 20px; background: rgba(255,0,0,0.2); border: 2px solid red; border-radius: 10px;">
-      <h3 style="color: yellow;">🚨 DEBUG INFO - WORKING PARSER</h3>
-      <div style="font-family: monospace; font-size: 12px; color: white;">
-        <div><strong>My Boat Name:</strong> "{{ myBoatName }}"</div>
-        <div><strong>Event ID:</strong> "{{ evId() }}"</div>
-        <div><strong>Class:</strong> "{{ HARDCODED_CLASS }}"</div>
-        <div><strong>Overall Rows:</strong> {{ overallRows.length }}</div>
-        <div><strong>Loading:</strong> {{ JSON.stringify(loading) }}</div>
-        <div><strong>Error:</strong> {{ error || 'None' }}</div>
-        
-        <div v-if="overallRows.length > 0">
-          <strong>SUCCESS! Found {{ overallRows.length }} boats:</strong>
-          <div v-for="boat in overallRows.slice(0, 5)" :key="boat._key" style="margin: 2px 0; background: rgba(0,0,0,0.3); padding: 4px;">
-            {{ boat.position }}. "{{ boat.name }}" 
-            - R1:{{ boat.r1 || '–' }} R2:{{ boat.r2 || '–' }} R3:{{ boat.r3 || '–' }} 
-            - Total:{{ boat.total || '–' }}
-            - {{ isMyBoat(boat.name) ? '🎯 MATCH!' : '❌ no match' }}
+    <!-- ===== DEBUG SECTION ===== -->
+    <div class="debug-section">
+      <h2 style="color: red; background: rgba(255,0,0,0.2); padding: 10px; border-radius: 8px;">
+        🚨 DEBUG INFO - BOAT MATCHING ISSUE 🚨
+      </h2>
+      
+      <div class="debug-grid">
+        <div class="debug-card">
+          <h3>Boat Matching</h3>
+          <div><strong>My Boat Name:</strong> "{{ boatName }}"</div>
+          <div><strong>Event ID:</strong> "{{ evId() }}"</div>
+          <div><strong>Class:</strong> "{{ selectedClassId }}"</div>
+          <div><strong>Overall Boats:</strong> {{ overallRows.length }}</div>
+          
+          <div v-if="overallRows.length > 0">
+            <h4>All Boats (with match test):</h4>
+            <div v-for="boat in overallRows" :key="boat._key" class="boat-test">
+              {{ boat.position }}. "{{ boat.name }}" 
+              → {{ isMe(boat.name) ? '✅ MATCH!' : '❌ no match' }}
+            </div>
           </div>
-          <div v-if="overallRows.length > 5">... and {{ overallRows.length - 5 }} more boats</div>
+          
+          <div v-if="myOverall" style="background: green; padding: 8px; margin: 8px 0;">
+            <strong>✅ FOUND MY BOAT:</strong><br>
+            Name: {{ myOverall.name }}<br>
+            Position: {{ myOverall.position }}<br>
+            Points: {{ myOverall.points }}
+          </div>
         </div>
-        
-        <div v-if="myOverall" style="background: rgba(0,255,0,0.2); padding: 8px; margin: 8px 0;">
-          <strong>✅ MY BOAT FOUND:</strong><br>
-          Name: {{ myOverall.name }}<br>
-          Position: {{ myOverall.position }}<br>
-          Total: {{ myOverall.total }}<br>
-          Race Points: R1:{{ myOverall.r1 }} R2:{{ myOverall.r2 }} R3:{{ myOverall.r3 }}
-        </div>
-        
-        <div v-if="overallRows.length === 0" style="background: rgba(255,0,0,0.3); padding: 8px;">
-          <strong>❌ NO BOATS FOUND!</strong><br>
-          Check if the ORC URL is working or parser needs adjustment.
+
+        <div class="debug-card">
+          <h3>API Status</h3>
+          <div><strong>Loading States:</strong></div>
+          <div>Overall: {{ loading.overall ? 'Loading...' : 'Done' }}</div>
+          <div>Last Race: {{ loading.last ? 'Loading...' : 'Done' }}</div>
+          <div>Classes: {{ loading.classes ? 'Loading...' : 'Done' }}</div>
+          
+          <div v-if="err" style="background: rgba(255,0,0,0.3); padding: 8px; margin: 8px 0;">
+            <strong>❌ ERROR:</strong> {{ err }}
+          </div>
         </div>
       </div>
     </div>
@@ -161,619 +195,329 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { supabase } from '../lib/supabase'
+import FlipCard from '../components/FlipCard.vue'
 
-// Constants
-const API_BASE = ''
-const HARDCODED_CLASS = 'M2'
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
-// Reactive data
+/* highlight current user's boat (FIXED BOAT MATCHING) */
+const boatName = ref('')
+async function loadBoatFromUser(){
+  const { data } = await supabase.auth.getUser()
+  boatName.value = data?.user?.user_metadata?.boat_name || ''
+  console.log('Loaded boat name from user:', boatName.value)
+}
+
+// FIXED: Better boat matching for "Northstar of London"
+function isMe(name=''){
+  if (!boatName.value || !name) return false
+  
+  const myName = boatName.value.toLowerCase()
+  const testName = name.toLowerCase()
+  
+  console.log('Boat match test:', { myName, testName })
+  
+  // Multiple matching strategies
+  const matches = [
+    testName === myName,                                    // Exact match
+    testName.includes('northstar'),                         // Contains northstar
+    myName.includes('northstar') && testName.includes('northstar'), // Both contain northstar
+    testName.includes('northstar of london'),               // Full name match
+    testName.replace(/\s+/g, '') === myName.replace(/\s+/g, ''), // Match ignoring spaces
+  ]
+  
+  const isMatch = matches.some(m => m === true)
+  console.log('Match result:', isMatch, 'for boat:', name)
+  
+  return isMatch
+}
+
+/* load events from DB */
 const regattas = ref([])
 const selectedRegattaId = ref('')
-const overallRows = ref([])
-const error = ref('')
-const lastUpdateTime = ref('')
-const myBoatName = ref('')
-const backgroundImageUrl = ref('')
-
-// UI state
-const overallFlipped = ref(false)
-const loading = ref({
-  regattas: false,
-  overall: false,
-  get any() {
-    return this.regattas || this.overall
-  }
-})
-
-// Computed properties
-const currentEvent = computed(() => 
-  regattas.value.find(r => r.id === selectedRegattaId.value) || null
-)
-
+const currentEvent = computed(() => regattas.value.find(r => r.id === selectedRegattaId.value) || null)
 const evId = () => currentEvent.value?.event_id || ''
 
+async function loadRegattas() {
+  const { data, error } = await supabase
+    .from('regattas')
+    .select('id,name,event_id,class_id,location,event_url,starts_on,ends_on')
+    .not('event_id','is', null)
+    .order('starts_on', { ascending: false })
+  if (!error) {
+    regattas.value = data || []
+    // Default to your Maxi Worlds 2024 event if present
+    const maxi = regattas.value.find(r => (r.event_id || '').toLowerCase() === 'xolfq')
+    selectedRegattaId.value = maxi?.id || regattas.value[0]?.id || ''
+  }
+}
+
+/* classes */
+const classes = ref([])           // [{id,label}]
+const selectedClassId = ref('')
+async function loadClasses(){
+  classes.value = []
+  if (!evId()) return
+  const json = await api(`/api/results-orc?type=classes&eventId=${encodeURIComponent(evId())}`)
+  classes.value = (json.results || []).map(x => ({ id: x.id, label: x.id }))
+  // Default to M2 if present (as you requested), else first
+  selectedClassId.value = classes.value.find(c => c.id === 'M2')?.id || classes.value[0]?.id || ''
+}
+
+/* races (scoped to class) */
+const races = ref([]) // [{id,label}]
+async function loadRacesForClass(){
+  races.value = []
+  if (!evId() || !selectedClassId.value) return
+  const json = await api(`/api/results-orc?type=racesForClass&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
+  races.value = (json.results || []).map(r => ({ id: r.id, label: `RACE ${r.id}` }))
+}
+
+/* "forced" last race for xolfq (13), otherwise fall back to last available id */
+const forcedLastRaceByEvent = { xolfq: '13' }
+const lastRaceId = computed(() => forcedLastRaceByEvent[evId()] || (races.value.at(-1)?.id || ''))
+const lastRaceTitle = computed(() => lastRaceId.value ? `RACE ${lastRaceId.value}` : 'RACE —')
+
+/* datasets */
+const overallRows = ref([])
+const lastRaceRows = ref([])
+const raceTables = ref({})      // { [raceId]: rows[] }
+const raceSummaries = ref({})   // { [raceId]: summary }
+
 const myOverall = computed(() => {
-  const found = overallRows.value.find(r => isMyBoat(r.name))
-  console.log('Looking for my boat:', myBoatName.value, 'Found:', found?.name || 'NONE')
+  const found = overallRows.value.find(r => isMe(r.name))
+  console.log('myOverall computed - found:', found?.name || 'NONE')
   return found
 })
+const otherRaces = computed(() => races.value.filter(r => r.id !== lastRaceId.value))
 
-const backgroundStyle = computed(() => {
-  if (backgroundImageUrl.value) {
-    return {
-      backgroundImage: `url(${backgroundImageUrl.value})`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center'
-    }
-  }
-  return {}
+/* ui state */
+const err = ref('')
+const loading = ref({
+  classes:false, races:false, overall:false, last:false, sets:false,
+  get any(){ return this.classes||this.races||this.overall||this.last||this.sets }
 })
 
-// Helper functions
-function isMyBoat(boatName) {
-  if (!myBoatName.value || !boatName) return false
-  
-  const myName = myBoatName.value.toLowerCase()
-  const testName = boatName.toLowerCase()
-  
-  // Simple matching - contains "northstar" anywhere
-  return testName.includes('northstar') || myName.includes('northstar')
+/* helpers */
+async function api(path){
+  console.log('API call:', path)
+  const r = await fetch(`${API_BASE}${path}`)
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
+function toSec(str){
+  if (!str) return null
+  if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(str)) return null
+  const p = str.split(':').map(Number)
+  return p.length === 3 ? p[0]*3600 + p[1]*60 + p[2] : p[0]*60 + p[1]
+}
+function mmssDelta(a,b){
+  const s1 = toSec(a), s2 = toSec(b)
+  if (s1 == null || s2 == null) return '–'
+  const d = Math.max(0, s2 - s1)
+  const mm = String(Math.floor(d/60)).padStart(2,'0')
+  const ss = String(d%60).padStart(2,'0')
+  return `${mm}:${ss}`
 }
 
-async function api(path) {
+/* loaders */
+async function reloadOverall(){
+  overallRows.value = []; loading.value.overall = true
   try {
-    console.log('API call:', path)
-    const response = await fetch(path)
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
-    }
-    
-    const data = await response.json()
-    console.log('API response:', data)
-    return data
-  } catch (e) {
-    console.error('API error:', e)
-    throw e
-  }
-}
-
-function updateLastUpdateTime() {
-  lastUpdateTime.value = new Date().toLocaleTimeString('en-US', { 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  })
-}
-
-// Data loading functions
-async function loadUserData() {
-  try {
-    const { data } = await supabase.auth.getUser()
-    const meta = data?.user?.user_metadata || {}
-    myBoatName.value = meta.boat_name || 'Northstar of London'
-    console.log('Loaded boat name:', myBoatName.value)
-  } catch (e) {
-    console.error('Error loading user data:', e)
-    myBoatName.value = 'Northstar of London'  // Fallback
-  }
-}
-
-async function loadRegattas() {
-  loading.value.regattas = true
-  try {
-    const { data, error: err } = await supabase
-      .from('regattas')
-      .select('id,name,event_id,class_id,location,event_url,starts_on,ends_on')
-      .not('event_id', 'is', null)
-      .order('starts_on', { ascending: false })
-    
-    if (!err) {
-      regattas.value = data || []
-      // Default to Maxi Worlds 2024
-      const maxi = regattas.value.find(r => (r.event_id || '').toLowerCase() === 'xolfq')
-      selectedRegattaId.value = maxi?.id || regattas.value[0]?.id || ''
-      console.log('Loaded regattas, selected:', selectedRegattaId.value)
-    }
-  } catch (e) {
-    error.value = `Error loading regattas: ${e.message}`
-  } finally {
-    loading.value.regattas = false
-  }
-}
-
-async function reloadOverall() {
-  loading.value.overall = true
-  overallRows.value = []
-  error.value = ''
-  
-  try {
-    if (!evId()) {
-      console.log('No event ID')
-      return
-    }
-    
-    console.log('Loading overall for event:', evId(), 'class:', HARDCODED_CLASS)
-    
-    // First try the direct ORC URL approach like parseSimpleRace
-    const orcUrl = `https://data.orc.org/public/WEV.dll?action=series&eventid=${encodeURIComponent(evId())}&classid=${encodeURIComponent(HARDCODED_CLASS)}`
-    console.log('Direct ORC URL:', orcUrl)
-    
-    try {
-      // Try direct fetch to ORC (might have CORS issues)
-      const response = await fetch(orcUrl)
-      if (response.ok) {
-        const html = await response.text()
-        console.log('Got HTML directly from ORC, parsing...')
-        const results = parseOverallFromHTML(html)
-        overallRows.value = results.map((r, i) => ({ ...r, _key: 'ov' + i }))
-        console.log('Parsed', results.length, 'boats from direct HTML')
-        return
-      }
-    } catch (directError) {
-      console.log('Direct ORC fetch failed (expected CORS):', directError.message)
-    }
-    
-    // Fallback to our API proxy
-    const json = await api(`/api/results-orc?type=overall&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(HARDCODED_CLASS)}`)
-    
+    if (!selectedClassId.value) return
+    console.log('Loading overall for:', evId(), selectedClassId.value)
+    const json = await api(`/api/results-orc?type=overall&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}`)
     console.log('Overall API response:', json)
+    overallRows.value = (json.results || []).map((r,i)=>({ ...r, _key:'ov'+i }))
+    console.log('Loaded', overallRows.value.length, 'boats')
     
-    const rawResults = json.results || []
-    overallRows.value = rawResults.map((r, i) => ({ ...r, _key: 'ov' + i }))
-    
-    console.log('Processed overall results:', overallRows.value.length, 'boats')
-    
-    // Log boat names for debugging
+    // Log all boat names for debugging
     overallRows.value.forEach((boat, i) => {
-      console.log(`Boat ${i + 1}: "${boat.name}" (pos: ${boat.position})`)
+      console.log(`Boat ${i + 1}: "${boat.name}"`)
     })
-    
-  } catch (e) {
-    console.error('Error loading overall results:', e)
-    error.value = `Error loading overall results: ${e.message}`
-  } finally {
-    loading.value.overall = false
+  } catch(e){ 
+    console.error('Overall error:', e)
+    err.value = `Overall: ${e.message}` 
   }
+  finally { loading.value.overall = false }
 }
 
-// Use the working parser pattern from your orc-results.js
-function parseOverallFromHTML(html) {
-  const results = []
-  
+async function reloadLastRace(){
+  lastRaceRows.value = []
+  loading.value.last = true
   try {
-    // Use the same approach as your working parseSimpleRace
-    const tableRowRegex = /<tr\s+class="data"[^>]*>.*?<\/tr>/gis
-    const matches = html.match(tableRowRegex)
-    
-    if (!matches) {
-      console.log('No data rows found in overall results')
-      return results
+    if (!lastRaceId.value) return
+    // raw race page, but tell API which class table to pick
+    const json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}&classId=${encodeURIComponent(selectedClassId.value)}`)
+    const rows = (json.results || []).map((r,i)=>({ ...r, _key:'last-'+i }))
+    lastRaceRows.value = rows
+
+    // summary for user's boat, with ahead/behind deltas
+    const idx = rows.findIndex(r => isMe(r.name))
+    const me = rows[idx]
+    const ahead  = idx>0 ? rows[idx-1] : null
+    const behind = idx>=0 && idx<rows.length-1 ? rows[idx+1] : null
+
+    lastRaceSummary.value = {
+      position: me?.position || '–',
+      finishTime: me?.finishTime || '–',
+      deltaToFirst: me?.deltaToFirst || '–',
+      deltaAhead: (ahead && ahead.correctedTime && me?.correctedTime) ? mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
+      deltaBehind: (behind && behind.correctedTime && me?.correctedTime) ? mmssDelta(me.correctedTime, behind.correctedTime) : '–'
     }
-    
-    for (let i = 0; i < matches.length; i++) {
-      const row = matches[i]
-      const cellRegex = /<td[^>]*>(.*?)<\/td>/gis
-      const cells = []
-      let cellMatch
-      
-      while ((cellMatch = cellRegex.exec(row)) !== null) {
-        const cellText = cellMatch[1]
-          .replace(/<[^>]*>/g, '')
-          .replace(/&amp;/g, '&')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/\s+/g, ' ')
-          .trim()
-        cells.push(cellText)
-      }
-      
-      // Map to overall standings structure (adjust column positions as needed)
-      if (cells.length >= 6) {
-        const position = cells[0] || ''
-        
-        if (position && !isNaN(parseInt(position, 10))) {
-          results.push({
-            position: cells[0],        // Position
-            nation: cells[1],          // Nation flag
-            name: cells[2],            // Boat name
-            sailNo: cells[3],          // Sail number
-            owner: cells[4],           // Owner/Skipper
-            points: cells[5],          // Points
-            total: cells[6] || cells[5] // Total points (fallback to points)
-          })
-        }
-      }
-    }
-    
-    console.log('parseOverallFromHTML extracted', results.length, 'boats')
-    
-  } catch (error) {
-    console.error('Error in parseOverallFromHTML:', error)
+  } catch(e){ 
+    console.error('Last race error:', e)
+    err.value = `Last race: ${e.message}` 
   }
-  
-  return results
+  finally { loading.value.last = false }
 }
 
-async function refreshData() {
+const lastRaceSummary = ref({ position:'–', finishTime:'–', deltaToFirst:'–', deltaAhead:'–', deltaBehind:'–' })
+
+async function loadOtherRaceTables(){
+  raceTables.value = {}; raceSummaries.value = {}; loading.value.sets = true
+  try {
+    for (const r of otherRaces.value) {
+      const json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(selectedClassId.value)}&raceId=${encodeURIComponent(r.id)}`)
+      const rows = (json.results || []).map((row,i)=>({ ...row, _key:`${r.id}-${i}` }))
+      raceTables.value[r.id] = rows
+
+      const idx = rows.findIndex(x => isMe(x.name))
+      const me = rows[idx]
+      const ahead  = idx>0 ? rows[idx-1] : null
+      const behind = idx>=0 && idx<rows.length-1 ? rows[idx+1] : null
+
+      raceSummaries.value[r.id] = {
+        position:     me?.position || '–',
+        finishTime:   me?.finishTime || '–',
+        deltaToFirst: me?.deltaToFirst || '–',
+        deltaAhead:   (ahead && ahead.correctedTime && me?.correctedTime) ? mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
+        deltaBehind:  (behind && behind.correctedTime && me?.correctedTime) ? mmssDelta(me.correctedTime, behind.correctedTime) : '–'
+      }
+    }
+  } catch(e){ err.value = `Race tables: ${e.message}` }
+  finally { loading.value.sets = false }
+}
+
+/* orchestration */
+async function reloadClassData() {
   await reloadOverall()
-  updateLastUpdateTime()
+  await reloadRacesAndLast()
+}
+async function reloadRacesAndLast(){
+  await loadRacesForClass()
+  await reloadLastRace()
+  await loadOtherRaceTables()
+}
+async function reloadAll(){
+  if (!selectedRegattaId.value) return
+  await loadClasses()
+  await reloadClassData()
 }
 
-function selectRegatta(regattaId) {
-  selectedRegattaId.value = regattaId
-  refreshData()
-}
+/* react to changes */
+watch(selectedRegattaId, () => reloadAll())
+watch(selectedClassId, () => reloadClassData())
 
-// Lifecycle
 onMounted(async () => {
-  console.log('Component mounted')
-  await Promise.all([loadUserData(), loadRegattas()])
-  
-  if (selectedRegattaId.value) {
-    await refreshData()
-  }
-  
-  updateLastUpdateTime()
-})
-
-// Watch for changes
-watch(selectedRegattaId, () => {
-  console.log('Regatta changed to:', selectedRegattaId.value)
-  refreshData()
+  await Promise.all([loadBoatFromUser(), loadRegattas()])
+  if (selectedRegattaId.value) await reloadAll()
 })
 </script>
 
 <style scoped>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+.results-page { color:#fff; padding:12px; }
+
+/* Toolbar */
+.toolbar { display:flex; justify-content:space-between; align-items:center; gap:.8rem; margin-bottom:.9rem; }
+.toolbar .left { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.toolbar .right { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+label { font-size:.9rem; opacity:.9; }
+select {
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: 10px;
+  padding: .5rem .7rem;
+}
+.pill { background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:.35rem .6rem; }
+.btn.ghost, .btn.link {
+  background: rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.25);
+  border-radius: 10px;
+  padding:.5rem .8rem;
+  color:#fff; cursor:pointer; text-decoration:none;
 }
 
-.results-page {
-  min-height: 100vh;
-  color: white;
-  position: relative;
-}
+/* Grid & Cards */
+.grid { display:grid; gap:16px; grid-template-columns: repeat(3, minmax(0,1fr)); }
+@media (max-width: 1100px){ .grid { grid-template-columns: 1fr; } }
+.card { min-height: 220px; }
+.card-title { margin:0 0 .6rem 0; }
 
-.background-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: #2a2a2a;
-  z-index: 1;
+/* Stats & Tables */
+.stats { display:grid; gap:10px; grid-template-columns: repeat(3, minmax(0,1fr)); }
+.stat {
+  background: rgba(255,255,255,.06);
+  padding:.7rem .8rem;
+  border-radius:10px;
 }
+.k { font-size:.8rem; opacity:.9; }
+.v { font-weight:800; font-size:1.15rem; }
 
-.container {
-  position: relative;
-  z-index: 2;
-  max-width: 430px;
-  margin: 0 auto;
-  padding: 20px;
-  min-height: 100vh;
-}
+.table-wrap { overflow:auto; border-radius:12px; }
+table { width:100%; border-collapse: collapse; }
+th, td { text-align:left; padding:.5rem .6rem; border-bottom: 1px solid rgba(255,255,255,.12); }
+tbody tr.me { background: rgba(0,255,170,.12); }
 
-/* Header */
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  padding: 15px 20px;
-  margin-bottom: 20px;
-}
-
-.header-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.regatta-name {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: #60a5fa;
-  margin: 0;
-}
-
-.last-update {
-  font-size: 0.9rem;
-  opacity: 0.8;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.live-indicator {
-  width: 8px;
-  height: 8px;
-  background: #10b981;
-  border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.regatta-selector {
-  margin-bottom: 15px;
-}
-
-.regatta-scroll {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  scroll-behavior: smooth;
-  padding: 5px 0;
-  scrollbar-width: none;
-}
-
-.regatta-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.regatta-pill {
-  flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 20px;
-  padding: 8px 16px;
-  color: white;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.regatta-pill.active {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-  border-color: #3b82f6;
-}
-
-.controls {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 10px;
-}
-
-.refresh-btn {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-  border: none;
+.empty { opacity:.85; }
+.empty.big {
+  opacity:.9; padding: 1rem;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.2);
   border-radius: 12px;
-  padding: 8px 16px;
-  color: white;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 14px;
+}
+.hint { margin-top:.6rem; opacity:.75; font-size:.85rem; }
+.error {
+  margin-top: 12px;
+  color:#ffd4d4; background:rgba(255,0,0,.12);
+  border:1px solid rgba(255,0,0,.25); padding:.6rem .7rem; border-radius:10px;
 }
 
-.refresh-btn:hover {
-  transform: scale(1.05);
+/* Debug Section */
+.debug-section {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: rgba(255,0,0,0.1);
+  border: 2px solid red;
+  border-radius: 12px;
 }
 
-.refresh-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.boat-info {
-  text-align: center;
-}
-
-.boat-pill {
-  display: inline-block;
-  background: rgba(96, 165, 250, 0.2);
-  border: 1px solid rgba(96, 165, 250, 0.4);
-  border-radius: 20px;
-  padding: 5px 12px;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.section {
-  margin-bottom: 25px;
-}
-
-.section-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0 0 15px 0;
-  padding-left: 10px;
-  border-left: 3px solid #60a5fa;
-  opacity: 0.9;
-}
-
-/* Flip Cards */
-.flip-card-container {
-  perspective: 1000px;
-  margin-bottom: 20px;
-}
-
-.flip-card {
-  position: relative;
-  width: 100%;
-  height: 180px;
-  transition: transform 0.6s;
-  transform-style: preserve-3d;
-  cursor: pointer;
-}
-
-.flip-card.flipped {
-  transform: rotateY(180deg);
-}
-
-.flip-card-front,
-.flip-card-back {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  backface-visibility: hidden;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.flip-card-back {
-  transform: rotateY(180deg);
-  overflow-y: auto;
-  padding: 15px;
-  justify-content: flex-start;
-}
-
-.race-header {
-  text-align: center;
-  margin-bottom: 15px;
-}
-
-.race-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #34d399;
-  margin-bottom: 5px;
-}
-
-.race-subtitle {
-  font-size: 0.9rem;
-  opacity: 0.7;
-}
-
-.northstar-summary {
-  text-align: center;
-  padding: 10px 0;
-}
-
-.boat-name-display {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #60a5fa;
-  margin-bottom: 15px;
-  letter-spacing: 1px;
-}
-
-.position-points-grid {
+.debug-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 10px;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 
-.stat-item {
-  text-align: center;
-}
-
-.stat-value {
-  font-size: 1.4rem;
-  font-weight: 800;
-  background: linear-gradient(135deg, #60a5fa, #34d399);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 3px;
-}
-
-.stat-label {
-  font-size: 0.8rem;
-  opacity: 0.8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.table-container {
-  flex: 1;
-  overflow-y: auto;
-  border-radius: 12px;
-}
-
-.results-table {
-  width: 100%;
-  border-collapse: collapse;
+.debug-card {
+  background: rgba(0,0,0,0.3);
+  padding: 1rem;
+  border-radius: 8px;
+  font-family: monospace;
   font-size: 0.85rem;
 }
 
-.results-table th,
-.results-table td {
-  padding: 8px 6px;
-  text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+.debug-card h3 {
+  color: yellow;
+  margin-bottom: 0.5rem;
 }
 
-.results-table th {
-  background: rgba(255, 255, 255, 0.1);
-  font-weight: 600;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  position: sticky;
-  top: 0;
+.debug-card h4 {
+  color: orange;
+  margin: 0.5rem 0;
 }
 
-.results-table tr:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.boat-highlight {
-  background: rgba(96, 165, 250, 0.2) !important;
-  border-left: 3px solid #60a5fa;
-}
-
-.loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100px;
-  opacity: 0.7;
-}
-
-.spinner {
-  width: 30px;
-  height: 30px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: #60a5fa;
-  animation: spin 1s linear infinite;
-  margin-right: 10px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.error {
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  border-radius: 12px;
-  padding: 15px;
-  margin: 10px 0;
-  color: #fca5a5;
-  font-size: 0.9rem;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  opacity: 0.7;
-}
-
-.tap-hint {
-  position: absolute;
-  bottom: 10px;
-  right: 15px;
-  font-size: 0.7rem;
-  opacity: 0.5;
+.boat-test {
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 </style>
