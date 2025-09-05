@@ -1,586 +1,1186 @@
 <template>
-  <div class="min-h-screen relative overflow-hidden">
-    <!-- Dynamic Background New version-->
-    <div 
-      class="absolute inset-0 bg-cover bg-center bg-no-repeat"
-      :style="{ backgroundImage: `url(${currentBackground})` }"
-    ></div>
+  <div class="results-page">
+    <!-- Background overlay -->
+    <div class="background-overlay" :style="backgroundStyle"></div>
     
-    <!-- Gradient Overlay -->
-    <div class="absolute inset-0 bg-gradient-to-br from-slate-900/80 via-slate-800/60 to-slate-900/90"></div>
-    
-    <!-- Admin Settings Button -->
-    <button 
-      v-if="isAdmin"
-      @click="showSettings = true"
-      class="fixed top-4 right-4 z-50 glass-card p-2 rounded-lg text-white/80 hover:text-white transition-colors"
-      title="Admin Settings"
-    >
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-      </svg>
-    </button>
-
-    <!-- Settings Modal -->
-    <div v-if="showSettings" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showSettings = false"></div>
-      <div class="relative glass-card rounded-2xl p-6 max-w-md w-full max-h-96 overflow-y-auto">
-        <h3 class="text-xl font-bold text-white mb-4">Background Settings</h3>
-        
-        <!-- Background Options -->
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div 
-            v-for="bg in backgroundOptions" 
-            :key="bg.id"
-            @click="setBackground(bg.url)"
-            :class="['relative h-20 rounded-lg bg-cover bg-center cursor-pointer border-2 transition-all', 
-                     currentBackground === bg.url ? 'border-blue-400' : 'border-white/20 hover:border-white/40']"
-            :style="{ backgroundImage: `url(${bg.url})` }"
-          >
-            <div class="absolute inset-0 bg-black/20 rounded-lg flex items-center justify-center">
-              <span class="text-white text-xs font-medium">{{ bg.name }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Custom Upload -->
-        <div class="mb-4">
-          <label class="block text-white/80 text-sm mb-2">Custom Background</label>
-          <input 
-            type="file" 
-            @change="handleCustomBackground"
-            accept="image/*"
-            class="w-full text-sm text-white/80 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-white/10 file:text-white hover:file:bg-white/20"
-          >
-        </div>
-
-        <button 
-          @click="showSettings = false"
-          class="w-full glass-card py-2 px-4 rounded-lg text-white hover:bg-white/10 transition-colors"
-        >
-          Done
-        </button>
-      </div>
+    <!-- Admin controls -->
+    <div v-if="isAdmin" class="admin-controls">
+      <button class="admin-btn" @click="$refs.backgroundUpload.click()" title="Upload background">
+        🖼️
+      </button>
+      <input
+        ref="backgroundUpload"
+        type="file"
+        accept="image/*"
+        @change="handleBackgroundUpload"
+        class="background-upload"
+      />
     </div>
 
-    <!-- Main Content -->
-    <div class="relative z-10 text-white p-4">
+    <div class="container">
       <!-- Header -->
-      <div class="mb-6">
-        <div class="flex justify-between items-start mb-2">
-          <div>
-            <h1 class="text-2xl font-bold text-white mb-1">{{ config.eventName }}</h1>
-            <p class="text-white/70 text-sm">{{ config.eventLocation }} • {{ config.eventDates }}</p>
+      <div class="header">
+        <div class="header-top">
+          <h1 class="regatta-name">{{ currentEvent?.name || 'Select Regatta' }}</h1>
+          <div class="last-update">
+            <div class="live-indicator"></div>
+            <span>{{ lastUpdateTime }}</span>
           </div>
-          <div class="text-right">
-            <div class="text-xs text-white/60">Last Update</div>
-            <div class="text-sm font-mono text-white/80">{{ lastUpdate.toLocaleTimeString() }}</div>
-            <div class="inline-flex items-center mt-1">
-              <div class="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></div>
-              <span class="text-xs text-green-400">Live</span>
+        </div>
+        
+        <!-- Swipable Regatta Selector -->
+        <div class="regatta-selector">
+          <div class="regatta-scroll" ref="regattaScroll">
+            <button 
+              v-for="regatta in regattas" 
+              :key="regatta.id"
+              :class="['regatta-pill', { active: selectedRegattaId === regatta.id }]"
+              @click="selectRegatta(regatta.id)"
+            >
+              {{ regatta.name }}
+            </button>
+          </div>
+        </div>
+        
+        <div class="controls">
+          <button class="refresh-btn" @click="refreshData" :disabled="loading.any">
+            {{ loading.any ? '⏳' : '🔄' }}
+          </button>
+        </div>
+
+        <div v-if="myBoatName" class="boat-info">
+          <span class="boat-pill">🚤 {{ myBoatName }}</span>
+        </div>
+      </div>
+
+      <!-- Error display -->
+      <div v-if="error" class="error">{{ error }}</div>
+
+      <!-- Latest Race Section -->
+      <div v-if="lastRaceId" class="section">
+        <h2 class="section-title">Latest Race - {{ lastRaceTitle }}</h2>
+        
+        <div class="flip-card-container">
+          <div class="flip-card" :class="{ flipped: lastRaceFlipped }" @click="lastRaceFlipped = !lastRaceFlipped">
+            <!-- Front: Race summary -->
+            <div class="flip-card-front">
+              <div class="race-header">
+                <div class="race-title">{{ lastRaceTitle }}</div>
+                <div class="race-subtitle">{{ formatDate(currentEvent?.starts_on) }}</div>
+              </div>
+              
+              <div v-if="loading.last" class="loading">
+                <div class="spinner"></div>
+                Loading race results...
+              </div>
+              
+              <div v-else-if="lastRaceSummary.position !== '–'" class="stats-grid">
+                <div class="stat-item">
+                  <div class="stat-value">{{ lastRaceSummary.position }}</div>
+                  <div class="stat-label">Position</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ lastRaceSummary.finishTime }}</div>
+                  <div class="stat-label">Finish Time</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value" :class="getDeltaClass(lastRaceSummary.deltaAhead)">
+                    {{ lastRaceSummary.deltaAhead }}
+                  </div>
+                  <div class="stat-label">Delta Ahead</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value" :class="getDeltaClass(lastRaceSummary.deltaBehind)">
+                    {{ lastRaceSummary.deltaBehind }}
+                  </div>
+                  <div class="stat-label">Delta Behind</div>
+                </div>
+              </div>
+              
+              <div v-else class="empty-state">
+                <div>No results yet</div>
+                <div class="race-subtitle">Check back later</div>
+              </div>
+              
+              <div class="tap-hint">
+                👆 Tap for full results
+              </div>
+            </div>
+            
+            <!-- Back: Full race results -->
+            <div class="flip-card-back">
+              <div class="race-header">
+                <div class="race-title">{{ lastRaceTitle }} - Full Results</div>
+              </div>
+              
+              <div v-if="lastRaceRows.length > 0" class="table-container">
+                <table class="results-table">
+                  <thead>
+                    <tr>
+                      <th>Pos</th>
+                      <th>Boat</th>
+                      <th>Finish</th>
+                      <th>Corrected</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr 
+                      v-for="row in lastRaceRows" 
+                      :key="row._key"
+                      :class="{ 'boat-highlight': isMyBoat(row.name) }"
+                    >
+                      <td>{{ row.position }}</td>
+                      <td>{{ row.name }}</td>
+                      <td>{{ row.finishTime }}</td>
+                      <td>{{ row.correctedTime }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <div v-else class="empty-state">
+                No results available
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center min-h-64">
-        <div class="glass-card p-8 rounded-2xl">
-          <div class="text-white text-xl">Loading regatta data...</div>
+      <!-- Series Overall Section -->
+      <div class="section">
+        <h2 class="section-title">Series Results Overall</h2>
+        
+        <div class="flip-card-container">
+          <div class="flip-card" :class="{ flipped: overallFlipped }" @click="overallFlipped = !overallFlipped">
+            <!-- Front: Overall summary -->
+            <div class="flip-card-front">
+              <div class="race-header">
+                <div class="race-title">M2 Class</div>
+                <div class="race-subtitle">{{ races.length }} races</div>
+              </div>
+              
+              <div v-if="loading.overall" class="loading">
+                <div class="spinner"></div>
+                Loading standings...
+              </div>
+              
+              <div v-else-if="myOverall" class="stats-grid">
+                <div class="stat-item">
+                  <div class="stat-value">{{ myOverall.position }}</div>
+                  <div class="stat-label">Position</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-value">{{ myOverall.total || myOverall.points }}</div>
+                  <div class="stat-label">Total Points</div>
+                </div>
+                <div class="stat-item" v-if="myOverall.sailNo">
+                  <div class="stat-value">{{ myOverall.sailNo }}</div>
+                  <div class="stat-label">Sail No</div>
+                </div>
+                <div class="stat-item" v-if="myOverall.skipper">
+                  <div class="stat-value">{{ myOverall.skipper }}</div>
+                  <div class="stat-label">Skipper</div>
+                </div>
+              </div>
+              
+              <div v-else class="empty-state">
+                <div>No standings yet</div>
+                <div class="race-subtitle">Check back after first race</div>
+              </div>
+              
+              <div class="tap-hint">
+                👆 Tap for full standings
+              </div>
+            </div>
+            
+            <!-- Back: Full overall results -->
+            <div class="flip-card-back">
+              <div class="race-header">
+                <div class="race-title">M2 - Full Standings</div>
+              </div>
+              
+              <div v-if="overallRows.length > 0" class="table-container">
+                <table class="results-table">
+                  <thead>
+                    <tr>
+                      <th>Pos</th>
+                      <th>Boat</th>
+                      <th>Sail</th>
+                      <th>Points</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr 
+                      v-for="row in overallRows" 
+                      :key="row._key"
+                      :class="{ 'boat-highlight': isMyBoat(row.name) }"
+                    >
+                      <td>{{ row.position }}</td>
+                      <td>{{ row.name }}</td>
+                      <td>{{ row.sailNo }}</td>
+                      <td>{{ row.total || row.points }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <div v-else class="empty-state">
+                No standings available
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div v-else>
-        <!-- Latest Race Results Card -->
-        <div class="mb-6">
-          <h2 class="text-lg font-semibold mb-3 text-white/80 uppercase tracking-wide">Latest Race - R3 Results</h2>
-          <div class="text-xs text-white/50 mb-3 uppercase tracking-wide">Click for full race results</div>
-          
-          <div class="glass-card rounded-2xl p-6 border border-white/20 cursor-pointer hover:bg-white/15 transition-all" 
-               @click="showLatestRace = !showLatestRace">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="text-xl font-bold text-white">Race R3</h3>
-              <span class="text-sm text-white/60">Today</span>
-            </div>
-            
-            <!-- Summary View -->
-            <div v-if="!showLatestRace" class="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <div class="text-white/60 text-sm mb-1">Position</div>
-                <div class="text-3xl font-bold text-blue-300">3rd</div>
-              </div>
-              <div>
-                <div class="text-white/60 text-sm mb-1">Delta Ahead</div>
-                <div class="text-lg font-mono text-orange-300">+0:00:00</div>
-              </div>
-              <div>
-                <div class="text-white/60 text-sm mb-1">Delta Behind</div>
-                <div class="text-lg font-mono text-green-300">+0:00:00</div>
-              </div>
-            </div>
-
-            <!-- Full Results View -->
-            <div v-else>
-              <h3 class="text-lg font-bold mb-3 text-white">Race R3 - Full Results</h3>
-              <div class="overflow-y-auto max-h-80">
-                <table class="w-full text-xs">
-                  <thead class="sticky top-0 bg-black/20 backdrop-blur-sm">
-                    <tr>
-                      <th class="text-left p-2 text-white/80">Pos</th>
-                      <th class="text-left p-2 text-white/80">Yacht</th>
-                      <th class="text-left p-2 text-white/80">Finish</th>
-                      <th class="text-left p-2 text-white/80">Delta</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr class="hover:bg-white/5">
-                      <td class="p-2 font-bold text-white">1</td>
-                      <td class="p-2 text-white">Sample Yacht 1</td>
-                      <td class="p-2 font-mono text-white/80">14:45:33</td>
-                      <td class="p-2 font-mono text-white/80">00:00:00</td>
-                    </tr>
-                    <tr class="hover:bg-white/5">
-                      <td class="p-2 font-bold text-white">2</td>
-                      <td class="p-2 text-white">Sample Yacht 2</td>
-                      <td class="p-2 font-mono text-white/80">14:46:15</td>
-                      <td class="p-2 font-mono text-white/80">00:00:42</td>
-                    </tr>
-                    <tr class="bg-blue-400/20 backdrop-blur-sm">
-                      <td class="p-2 font-bold text-white">3</td>
-                      <td class="p-2 text-white">NORTHSTAR OF LONDON</td>
-                      <td class="p-2 font-mono text-white/80">14:47:01</td>
-                      <td class="p-2 font-mono text-white/80">00:01:28</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Series Overall Results Card -->
-        <div class="mb-6">
-          <h2 class="text-lg font-semibold mb-3 text-white/80 uppercase tracking-wide">Series Results Overall</h2>
-          <div class="text-xs text-white/50 mb-3 uppercase tracking-wide">Click for points breakdown</div>
-          
-          <div class="glass-card rounded-2xl p-6 border border-white/20 cursor-pointer hover:bg-white/15 transition-all"
-               @click="showOverall = !showOverall">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="text-xl font-bold text-white">Superyacht Class</h3>
-              <span class="text-sm text-white/60">3 races</span>
-            </div>
-            
-            <!-- Summary View -->
-            <div v-if="!showOverall" class="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <div class="text-white/60 text-sm mb-1">Position</div>
-                <div class="text-3xl font-bold text-blue-300">2nd</div>
-              </div>
-              <div>
-                <div class="text-white/60 text-sm mb-1">Total Points</div>
-                <div class="text-2xl font-bold text-yellow-300">6.0</div>
-              </div>
-              <div>
-                <div class="text-white/60 text-sm mb-1">Net Points</div>
-                <div class="text-2xl font-bold text-green-300">6.0</div>
-              </div>
-            </div>
-
-            <!-- Full Results View -->
-            <div v-else>
-              <h3 class="text-lg font-bold mb-3 text-white">Overall Standings</h3>
-              <div class="overflow-y-auto max-h-80">
-                <table class="w-full text-xs">
-                  <thead class="sticky top-0 bg-black/20 backdrop-blur-sm">
-                    <tr>
-                      <th class="text-left p-2 text-white/80">Pos</th>
-                      <th class="text-left p-2 text-white/80">Yacht</th>
-                      <th class="text-left p-2 text-white/80">R1</th>
-                      <th class="text-left p-2 text-white/80">R2</th>
-                      <th class="text-left p-2 text-white/80">R3</th>
-                      <th class="text-left p-2 text-white/80">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr class="hover:bg-white/5">
-                      <td class="p-2 font-bold text-white">1</td>
-                      <td class="p-2 text-white">Sample Yacht 1</td>
-                      <td class="p-2 font-mono text-white/80">1</td>
-                      <td class="p-2 font-mono text-white/80">1</td>
-                      <td class="p-2 font-mono text-white/80">1</td>
-                      <td class="p-2 font-mono font-bold text-white">3.0</td>
-                    </tr>
-                    <tr class="bg-blue-400/20 backdrop-blur-sm">
-                      <td class="p-2 font-bold text-white">2</td>
-                      <td class="p-2 text-white">NORTHSTAR OF LONDON</td>
-                      <td class="p-2 font-mono text-white/80">2</td>
-                      <td class="p-2 font-mono text-white/80">1</td>
-                      <td class="p-2 font-mono text-white/80">3</td>
-                      <td class="p-2 font-mono font-bold text-white">6.0</td>
-                    </tr>
-                    <tr class="hover:bg-white/5">
-                      <td class="p-2 font-bold text-white">3</td>
-                      <td class="p-2 text-white">Sample Yacht 3</td>
-                      <td class="p-2 font-mono text-white/80">3</td>
-                      <td class="p-2 font-mono text-white/80">3</td>
-                      <td class="p-2 font-mono text-white/80">2</td>
-                      <td class="p-2 font-mono font-bold text-white">8.0</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Race Details Cards -->
-        <div class="mb-6">
-          <h2 class="text-lg font-semibold mb-3 text-white/80 uppercase tracking-wide">Race Result Details</h2>
-          <div class="text-xs text-white/50 mb-3 uppercase tracking-wide">Click to view full results</div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            
-            <!-- Race R1 -->
-            <div class="glass-card rounded-xl p-4 border border-white/20 min-h-32 cursor-pointer hover:bg-white/15 transition-all"
-                 @click="toggleRaceDetail('race1')">
-              <div v-if="!showRaceDetails.race1" class="text-center">
-                <div class="text-white/60 text-sm mb-1">Race R1</div>
-                <div class="text-2xl font-bold mb-2 text-white">2nd</div>
-                <div class="text-xs text-white/80">Finish: 13:58:42</div>
-                <div class="text-xs text-white/60">No gap data</div>
-              </div>
-              
-              <div v-else class="overflow-hidden">
-                <h4 class="font-bold mb-2 text-sm text-white">Race R1</h4>
-                <div class="overflow-y-auto max-h-24">
-                  <table class="w-full text-xs">
-                    <tbody>
-                      <tr><td class="py-1 font-bold w-6 text-white">1</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 1</td></tr>
-                      <tr class="bg-blue-400/20"><td class="py-1 font-bold w-6 text-white">2</td><td class="py-1 text-xs truncate text-white/80">NORTHSTAR OF LONDON</td></tr>
-                      <tr><td class="py-1 font-bold w-6 text-white">3</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 3</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <!-- Race R2 -->
-            <div class="glass-card rounded-xl p-4 border border-white/20 min-h-32 cursor-pointer hover:bg-white/15 transition-all"
-                 @click="toggleRaceDetail('race2')">
-              <div v-if="!showRaceDetails.race2" class="text-center">
-                <div class="text-white/60 text-sm mb-1">Race R2</div>
-                <div class="text-2xl font-bold mb-2 text-white">1st</div>
-                <div class="text-xs text-white/80">Finish: 15:02:18</div>
-                <div class="text-xs text-white/60">No gap data</div>
-              </div>
-              
-              <div v-else class="overflow-hidden">
-                <h4 class="font-bold mb-2 text-sm text-white">Race R2</h4>
-                <div class="overflow-y-auto max-h-24">
-                  <table class="w-full text-xs">
-                    <tbody>
-                      <tr class="bg-blue-400/20"><td class="py-1 font-bold w-6 text-white">1</td><td class="py-1 text-xs truncate text-white/80">NORTHSTAR OF LONDON</td></tr>
-                      <tr><td class="py-1 font-bold w-6 text-white">2</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 2</td></tr>
-                      <tr><td class="py-1 font-bold w-6 text-white">3</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 3</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <!-- Race R3 -->
-            <div class="glass-card rounded-xl p-4 border border-white/20 min-h-32 cursor-pointer hover:bg-white/15 transition-all"
-                 @click="toggleRaceDetail('race3')">
-              <div v-if="!showRaceDetails.race3" class="text-center">
-                <div class="text-white/60 text-sm mb-1">Race R3</div>
-                <div class="text-2xl font-bold mb-2 text-white">3rd</div>
-                <div class="text-xs text-white/80">Finish: 14:45:33</div>
-                <div class="text-xs text-white/60">-0:05:45 behind</div>
-              </div>
-              
-              <div v-else class="overflow-hidden">
-                <h4 class="font-bold mb-2 text-sm text-white">Race R3</h4>
-                <div class="overflow-y-auto max-h-24">
-                  <table class="w-full text-xs">
-                    <tbody>
-                      <tr><td class="py-1 font-bold w-6 text-white">1</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 1</td></tr>
-                      <tr><td class="py-1 font-bold w-6 text-white">2</td><td class="py-1 text-xs truncate text-white/80">Sample Yacht 2</td></tr>
-                      <tr class="bg-blue-400/20"><td class="py-1 font-bold w-6 text-white">3</td><td class="py-1 text-xs truncate text-white/80">NORTHSTAR OF LONDON</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="text-center text-white/60 text-xs mt-8">
-          <p>Last updated: {{ lastUpdate.toLocaleTimeString() }}</p>
-          <button 
-            @click="refreshData"
-            class="mt-2 px-4 py-2 glass-card border border-white/20 rounded-lg text-white hover:bg-white/10 transition-colors"
+      <!-- Previous Races Section -->
+      <div v-if="otherRaces.length > 0" class="section">
+        <h2 class="section-title">Previous Races</h2>
+        
+        <div class="previous-races">
+          <div 
+            v-for="race in otherRaces" 
+            :key="race.id" 
+            class="flip-card-container"
           >
-            Refresh Data
-          </button>
-          <button 
-            @click="loadFromAPI"
-            class="mt-2 ml-2 px-4 py-2 glass-card border border-blue-400/50 rounded-lg text-blue-300 hover:bg-blue-400/10 transition-colors"
-          >
-            Load from ORC API
-          </button>
+            <div 
+              class="flip-card" 
+              :class="{ flipped: flippedRaces.has(race.id) }" 
+              @click="toggleRaceFlip(race.id)"
+            >
+              <!-- Front: Race summary -->
+              <div class="flip-card-front">
+                <div class="race-header">
+                  <div class="race-title">{{ race.label }}</div>
+                  <div class="race-subtitle">{{ formatDate(currentEvent?.starts_on) }}</div>
+                </div>
+                
+                <div v-if="loading.sets" class="loading">
+                  <div class="spinner"></div>
+                  Loading...
+                </div>
+                
+                <div v-else-if="raceSummaries[race.id]?.position !== '–'" class="stats-grid">
+                  <div class="stat-item">
+                    <div class="stat-value">{{ raceSummaries[race.id]?.position }}</div>
+                    <div class="stat-label">Position</div>
+                  </div>
+                  <div class="stat-item">
+                    <div class="stat-value">{{ raceSummaries[race.id]?.finishTime }}</div>
+                    <div class="stat-label">Finish Time</div>
+                  </div>
+                  <div class="stat-item">
+                    <div class="stat-value" :class="getDeltaClass(raceSummaries[race.id]?.deltaAhead)">
+                      {{ raceSummaries[race.id]?.deltaAhead }}
+                    </div>
+                    <div class="stat-label">Delta Ahead</div>
+                  </div>
+                  <div class="stat-item">
+                    <div class="stat-value" :class="getDeltaClass(raceSummaries[race.id]?.deltaBehind)">
+                      {{ raceSummaries[race.id]?.deltaBehind }}
+                    </div>
+                    <div class="stat-label">Delta Behind</div>
+                  </div>
+                </div>
+                
+                <div v-else class="empty-state">
+                  <div>No results yet</div>
+                </div>
+                
+                <div class="tap-hint">
+                  👆 Tap for full results
+                </div>
+              </div>
+              
+              <!-- Back: Full race results -->
+              <div class="flip-card-back">
+                <div class="race-header">
+                  <div class="race-title">{{ race.label }} - Full Results</div>
+                </div>
+                
+                <div v-if="raceTables[race.id]?.length > 0" class="table-container">
+                  <table class="results-table">
+                    <thead>
+                      <tr>
+                        <th>Pos</th>
+                        <th>Boat</th>
+                        <th>Finish</th>
+                        <th>Corrected</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr 
+                        v-for="row in raceTables[race.id]" 
+                        :key="row._key"
+                        :class="{ 'boat-highlight': isMyBoat(row.name) }"
+                      >
+                        <td>{{ row.position }}</td>
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.finishTime }}</td>
+                        <td>{{ row.correctedTime }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div v-else class="empty-state">
+                  No results available
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script>
-export default {
-  name: 'Results',
-  data() {
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { supabase } from '../lib/supabase'
+
+// Constants
+const UPDATE_INTERVAL = 5 * 60 * 1000 // 5 minutes
+const HARDCODED_CLASS = 'M2' // Hardcoded M2 class
+
+// Reactive data
+const regattas = ref([])
+const selectedRegattaId = ref('')
+const races = ref([])
+const overallRows = ref([])
+const lastRaceRows = ref([])
+const raceTables = ref({})
+const raceSummaries = ref({})
+const error = ref('')
+const lastUpdateTime = ref('')
+const myBoatName = ref('')
+const isAdmin = ref(false)
+const backgroundImageUrl = ref('')
+
+// UI state
+const lastRaceFlipped = ref(false)
+const overallFlipped = ref(false)
+const flippedRaces = ref(new Set())
+const loading = ref({
+  regattas: false,
+  races: false,
+  overall: false,
+  last: false,
+  sets: false,
+  get any() {
+    return this.regattas || this.races || this.overall || this.last || this.sets
+  }
+})
+
+// Auto-update interval
+let updateInterval = null
+
+// Computed properties
+const currentEvent = computed(() => 
+  regattas.value.find(r => r.id === selectedRegattaId.value) || null
+)
+
+const evId = () => currentEvent.value?.event_id || ''
+
+const lastRaceId = computed(() => {
+  const forcedLastRaceByEvent = { xolfq: '13' }
+  return forcedLastRaceByEvent[evId()] || (races.value.at(-1)?.id || '')
+})
+
+const lastRaceTitle = computed(() => 
+  lastRaceId.value ? `RACE ${lastRaceId.value}` : 'RACE —'
+)
+
+const otherRaces = computed(() => 
+  races.value.filter(r => r.id !== lastRaceId.value)
+)
+
+const myOverall = computed(() => 
+  overallRows.value.find(r => isMyBoat(r.name))
+)
+
+const lastRaceSummary = ref({ 
+  position: '–', 
+  finishTime: '–', 
+  deltaToFirst: '–', 
+  deltaAhead: '–', 
+  deltaBehind: '–' 
+})
+
+const backgroundStyle = computed(() => {
+  if (backgroundImageUrl.value) {
     return {
-      loading: false,
-      lastUpdate: new Date(),
-      showSettings: false,
-      isAdmin: true, // Set this based on user role
-      currentBackground: '',
-      
-      // Card visibility states
-      showLatestRace: false,
-      showOverall: false,
-      showRaceDetails: {
-        race1: false,
-        race2: false,
-        race3: false
-      },
-      
-      // Predefined background options
-      backgroundOptions: [
-        {
-          id: 'sailing1',
-          name: 'Ocean Blue',
-          url: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80'
-        },
-        {
-          id: 'sailing2', 
-          name: 'Sunset Sail',
-          url: 'https://images.unsplash.com/photo-1502680390469-be75c86b636f?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80'
-        },
-        {
-          id: 'sailing3',
-          name: 'Marina',
-          url: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80'
-        },
-        {
-          id: 'sailing4',
-          name: 'Regatta',
-          url: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80'
-        },
-        {
-          id: 'sailing5',
-          name: 'Harbor',
-          url: 'https://images.unsplash.com/photo-1473800447596-01729482b8eb?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80'
-        },
-        {
-          id: 'sailing6',
-          name: 'Yacht Race',
-          url: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80'
-        }
-      ],
-      
-      // Configuration - update these for different events
-      config: {
-        eventId: 'xolfq',
-        classId: 'M2',
-        eventName: 'Giorgio Armani Superyacht Regatta',
-        eventLocation: 'MOAT • Porto Cervo',
-        eventDates: '27/5/2025 - 31/5/2025'
-      }
+      backgroundImage: `url(${backgroundImageUrl.value})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundAttachment: 'fixed'
     }
-  },
-  
-  methods: {
-    toggleRaceDetail(raceKey) {
-      this.$set(this.showRaceDetails, raceKey, !this.showRaceDetails[raceKey]);
-    },
+  }
+  return {}
+})
 
-    setBackground(url) {
-      this.currentBackground = url;
-      localStorage.setItem('regatta-background', url);
-    },
+// Helper functions
+function isMyBoat(boatName) {
+  if (!myBoatName.value || !boatName) return false
+  // More flexible matching for "Northstar of London"
+  const myName = myBoatName.value.toLowerCase()
+  const testName = boatName.toLowerCase()
+  return testName.includes(myName) || myName.includes(testName) ||
+         testName.includes('northstar') || myName.includes('northstar')
+}
 
-    handleCustomBackground(event) {
-      const file = event.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          this.setBackground(e.target.result);
-        };
-        reader.readAsDataURL(file);
-      }
-    },
+function getDeltaClass(delta) {
+  if (!delta || delta === '–') return 'delta-neutral'
+  if (delta.startsWith('+')) return 'delta-positive'
+  return 'delta-negative'
+}
 
-    loadSavedBackground() {
-      const saved = localStorage.getItem('regatta-background');
-      this.currentBackground = saved || this.backgroundOptions[0].url;
-    },
+function formatDate(dateString) {
+  if (!dateString) return ''
+  return new Date(dateString).toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric' 
+  })
+}
 
-    refreshData() {
-      this.lastUpdate = new Date();
-      // Add your data refresh logic here
-      console.log('Refreshing data...');
-    },
-
-    loadFromAPI() {
-      // This is where we'll connect to your ORC API
-      console.log('Loading from ORC API...');
-      // TODO: Add API integration
-    }
-  },
-  
-  mounted() {
-    this.loadSavedBackground();
+function toggleRaceFlip(raceId) {
+  if (flippedRaces.value.has(raceId)) {
+    flippedRaces.value.delete(raceId)
+  } else {
+    flippedRaces.value.add(raceId)
   }
 }
+
+async function api(path) {
+  try {
+    console.log('Making API call to:', path)
+    const response = await fetch(path)
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const text = await response.text()
+    console.log('Raw response:', text.substring(0, 200) + '...')
+    
+    if (!text.trim()) {
+      throw new Error('Empty response from server')
+    }
+    
+    try {
+      return JSON.parse(text)
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError)
+      console.error('Response text:', text)
+      throw new Error(`Invalid JSON response: ${parseError.message}`)
+    }
+  } catch (fetchError) {
+    console.error('Fetch error:', fetchError)
+    throw fetchError
+  }
+}
+
+function updateLastUpdateTime() {
+  lastUpdateTime.value = new Date().toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
+}
+
+// Helper functions for time calculations
+function toSec(str) {
+  if (!str) return null
+  if (/^(DNF|DNS|DSQ|DNC|RET)$/i.test(str)) return null
+  const p = str.split(':').map(Number)
+  return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]
+}
+
+function mmssDelta(a, b) {
+  const s1 = toSec(a), s2 = toSec(b)
+  if (s1 == null || s2 == null) return '–'
+  const d = Math.max(0, s2 - s1)
+  const mm = String(Math.floor(d / 60)).padStart(2, '0')
+  const ss = String(d % 60).padStart(2, '0')
+  return `${mm}:${ss}`
+}
+
+// Data loading functions
+async function loadUserData() {
+  try {
+    const { data } = await supabase.auth.getUser()
+    const meta = data?.user?.user_metadata || {}
+    myBoatName.value = meta.boat_name || ''
+    
+    // Check if user is admin
+    if (data?.user?.id) {
+      const { data: memberData } = await supabase
+        .from('team_members')
+        .select('role')
+        .eq('user_id', data.user.id)
+      
+      isAdmin.value = Array.isArray(memberData) && 
+                     memberData.some(m => m.role === 'admin')
+    }
+  } catch (e) {
+    console.error('Error loading user data:', e)
+  }
+}
+
+async function loadRegattas() {
+  loading.value.regattas = true
+  try {
+    const { data, error: err } = await supabase
+      .from('regattas')
+      .select('id,name,event_id,class_id,location,event_url,starts_on,ends_on')
+      .not('event_id', 'is', null)
+      .order('starts_on', { ascending: false })
+    
+    if (!err) {
+      regattas.value = data || []
+      // Default to Maxi Worlds 2024 if present
+      const maxi = regattas.value.find(r => (r.event_id || '').toLowerCase() === 'xolfq')
+      selectedRegattaId.value = maxi?.id || regattas.value[0]?.id || ''
+    }
+  } catch (e) {
+    error.value = `Error loading regattas: ${e.message}`
+  } finally {
+    loading.value.regattas = false
+  }
+}
+
+async function loadRacesForClass() {
+  loading.value.races = true
+  races.value = []
+  if (!evId()) return
+  
+  try {
+    const json = await api(`/api/results-orc?type=racesForClass&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(HARDCODED_CLASS)}`)
+    races.value = (json.results || []).map(r => ({ id: r.id, label: `RACE ${r.id}` }))
+    console.log('Loaded races:', races.value)
+  } catch (e) {
+    console.error('Error loading races:', e)
+    error.value = `Error loading races: ${e.message}`
+  } finally {
+    loading.value.races = false
+  }
+}
+
+async function reloadOverall() {
+  loading.value.overall = true
+  overallRows.value = []
+  
+  try {
+    if (!evId()) return
+    const json = await api(`/api/results-orc?type=overall&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(HARDCODED_CLASS)}`)
+    overallRows.value = (json.results || []).map((r, i) => ({ ...r, _key: 'ov' + i }))
+    console.log('Loaded overall results:', overallRows.value)
+  } catch (e) {
+    console.error('Error loading overall results:', e)
+    error.value = `Error loading overall results: ${e.message}`
+  } finally {
+    loading.value.overall = false
+  }
+}
+
+async function reloadLastRace() {
+  loading.value.last = true
+  lastRaceRows.value = []
+  
+  try {
+    if (!lastRaceId.value) return
+    
+    const json = await api(`/api/results-orc?type=raceRaw&eventId=${encodeURIComponent(evId())}&raceId=${encodeURIComponent(lastRaceId.value)}&classId=${encodeURIComponent(HARDCODED_CLASS)}`)
+    const rows = (json.results || []).map((r, i) => ({ ...r, _key: 'last-' + i }))
+    lastRaceRows.value = rows
+    console.log('Loaded last race results:', rows)
+
+    // Calculate summary for user's boat
+    const idx = rows.findIndex(r => isMyBoat(r.name))
+    const me = rows[idx]
+    const ahead = idx > 0 ? rows[idx - 1] : null
+    const behind = idx >= 0 && idx < rows.length - 1 ? rows[idx + 1] : null
+
+    lastRaceSummary.value = {
+      position: me?.position || '–',
+      finishTime: me?.finishTime || '–',
+      deltaToFirst: me?.deltaToFirst || '–',
+      deltaAhead: (ahead && ahead.correctedTime && me?.correctedTime) 
+        ? mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
+      deltaBehind: (behind && behind.correctedTime && me?.correctedTime) 
+        ? mmssDelta(me.correctedTime, behind.correctedTime) : '–'
+    }
+    console.log('Last race summary:', lastRaceSummary.value)
+  } catch (e) {
+    console.error('Error loading last race:', e)
+    error.value = `Error loading last race: ${e.message}`
+  } finally {
+    loading.value.last = false
+  }
+}
+
+async function loadOtherRaceTables() {
+  loading.value.sets = true
+  raceTables.value = {}
+  raceSummaries.value = {}
+  
+  try {
+    for (const r of otherRaces.value) {
+      const json = await api(`/api/results-orc?type=race&eventId=${encodeURIComponent(evId())}&classId=${encodeURIComponent(HARDCODED_CLASS)}&raceId=${encodeURIComponent(r.id)}`)
+      const rows = (json.results || []).map((row, i) => ({ ...row, _key: `${r.id}-${i}` }))
+      raceTables.value[r.id] = rows
+
+      const idx = rows.findIndex(x => isMyBoat(x.name))
+      const me = rows[idx]
+      const ahead = idx > 0 ? rows[idx - 1] : null
+      const behind = idx >= 0 && idx < rows.length - 1 ? rows[idx + 1] : null
+
+      raceSummaries.value[r.id] = {
+        position: me?.position || '–',
+        finishTime: me?.finishTime || '–',
+        deltaToFirst: me?.deltaToFirst || '–',
+        deltaAhead: (ahead && ahead.correctedTime && me?.correctedTime) 
+          ? mmssDelta(ahead.correctedTime, me.correctedTime) : '–',
+        deltaBehind: (behind && behind.correctedTime && me?.correctedTime) 
+          ? mmssDelta(me.correctedTime, behind.correctedTime) : '–'
+      }
+    }
+    console.log('Loaded other race tables:', raceTables.value)
+  } catch (e) {
+    console.error('Error loading race tables:', e)
+    error.value = `Error loading race tables: ${e.message}`
+  } finally {
+    loading.value.sets = false
+  }
+}
+
+// Orchestration functions
+async function reloadClassData() {
+  await Promise.all([
+    reloadOverall(),
+    loadRacesForClass()
+  ])
+  await reloadLastRace()
+  await loadOtherRaceTables()
+}
+
+async function reloadAll() {
+  if (!selectedRegattaId.value) return
+  error.value = ''
+  console.log('Reloading all data for event:', evId())
+  await reloadClassData()
+  updateLastUpdateTime()
+}
+
+async function refreshData() {
+  await reloadAll()
+}
+
+// Regatta selection
+function selectRegatta(regattaId) {
+  selectedRegattaId.value = regattaId
+  reloadAll()
+}
+
+// Background upload handling
+async function handleBackgroundUpload(event) {
+  const file = event.target.files[0]
+  if (!file) return
+
+  try {
+    const { data: userData } = await supabase.auth.getUser()
+    if (!userData?.user) throw new Error('Not authenticated')
+
+    // Upload to Supabase storage
+    const fileName = `bg-${Date.now()}-${file.name}`
+    const { data, error: uploadError } = await supabase.storage
+      .from('backgrounds')
+      .upload(fileName, file)
+
+    if (uploadError) throw uploadError
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('backgrounds')
+      .getPublicUrl(data.path)
+
+    backgroundImageUrl.value = publicUrl
+
+    // Save to localStorage
+    localStorage.setItem('backgroundImageUrl', publicUrl)
+  } catch (e) {
+    error.value = `Error uploading background: ${e.message}`
+  }
+}
+
+// Lifecycle
+onMounted(async () => {
+  console.log('Component mounted, initializing...')
+  await Promise.all([loadUserData(), loadRegattas()])
+  
+  // Load saved background
+  const savedBg = localStorage.getItem('backgroundImageUrl')
+  if (savedBg) {
+    backgroundImageUrl.value = savedBg
+  }
+  
+  if (selectedRegattaId.value) {
+    await reloadAll()
+  }
+  
+  // Set up auto-refresh
+  updateInterval = setInterval(reloadAll, UPDATE_INTERVAL)
+  updateLastUpdateTime()
+})
+
+onBeforeUnmount(() => {
+  if (updateInterval) {
+    clearInterval(updateInterval)
+  }
+})
+
+// Watch for changes
+watch(selectedRegattaId, () => {
+  console.log('Regatta changed to:', selectedRegattaId.value)
+  reloadAll()
+})
 </script>
 
 <style scoped>
-.glass-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  box-shadow: 0 4px 24px 0 rgba(31, 38, 135, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.glass-card:hover {
-  background: rgba(255, 255, 255, 0.05);
-  transform: translateY(-1px);
-  transition: all 0.3s ease;
-  box-shadow: 0 6px 30px 0 rgba(31, 38, 135, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-/* Settings modal - slightly less transparent for readability */
-.glass-card.rounded-2xl {
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
-/* Table headers with minimal glass effect */
-.bg-black\/20 {
-  background: rgba(0, 0, 0, 0.05) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-/* Very subtle highlight for NORTHSTAR */
-.bg-blue-400\/20 {
-  background: rgba(59, 130, 246, 0.08) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(59, 130, 246, 0.15);
-}
-
-/* Minimal hover effects for table rows */
-.hover\:bg-white\/5:hover {
-  background: rgba(255, 255, 255, 0.02) !important;
-}
-
-/* Admin settings button - very transparent */
-button.glass-card {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-button.glass-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-/* Minimal borders */
-.border-white\/20 {
-  border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.border-white\/40 {
-  border-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-/* Smooth transitions */
 * {
-  transition: all 0.3s ease;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-/* Ultra-minimal scrollbar */
-::-webkit-scrollbar {
-  width: 4px;
+.results-page {
+  min-height: 100vh;
+  color: white;
+  position: relative;
 }
 
-::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 10px;
+.background-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #2a2a2a;
+  z-index: 1;
 }
 
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
+.background-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(42, 42, 42, 0.7);
+  backdrop-filter: blur(3px);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+.container {
+  position: relative;
+  z-index: 2;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 20px;
+  min-height: 100vh;
 }
 
-/* Loading card */
-.glass-card.p-8 {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+/* Header */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 15px 20px;
+  margin-bottom: 20px;
 }
 
-/* Footer buttons - very subtle */
-.glass-card.border-white\/20 {
-  background: rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
 }
 
-.glass-card.border-blue-400\/50 {
-  background: rgba(59, 130, 246, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-/* Modal overlay - minimal blur */
-.bg-black\/50 {
-  background: rgba(0, 0, 0, 0.25) !important;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-/* Enhance text contrast for readability on transparent cards */
-.text-white {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.text-white\/80 {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.text-white\/60 {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-}
-
-/* Improve number visibility */
-.text-3xl, .text-2xl, .text-xl {
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+.regatta-name {
+  font-size: 1.2rem;
   font-weight: 700;
+  color: #60a5fa;
+  margin: 0;
+}
+
+.last-update {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.live-indicator {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Swipable Regatta Selector */
+.regatta-selector {
+  margin-bottom: 15px;
+}
+
+.regatta-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 5px 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.regatta-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.regatta-pill {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  padding: 8px 16px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.regatta-pill.active {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-color: #3b82f6;
+}
+
+.regatta-pill:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.refresh-btn {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border: none;
+  border-radius: 12px;
+  padding: 8px 16px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+}
+
+.refresh-btn:hover {
+  transform: scale(1.05);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.boat-info {
+  text-align: center;
+}
+
+.boat-pill {
+  display: inline-block;
+  background: rgba(96, 165, 250, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Section Titles - No Icons */
+.section {
+  margin-bottom: 25px;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 15px 0;
+  padding-left: 10px;
+  border-left: 3px solid #60a5fa;
+  opacity: 0.9;
+}
+
+/* Flip Cards */
+.flip-card-container {
+  perspective: 1000px;
+  margin-bottom: 20px;
+}
+
+.flip-card {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+  cursor: pointer;
+}
+
+.flip-card.flipped {
+  transform: rotateY(180deg);
+}
+
+.flip-card-front,
+.flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.flip-card-back {
+  transform: rotateY(180deg);
+  overflow-y: auto;
+  padding: 15px;
+  justify-content: flex-start;
+}
+
+.race-header {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.race-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #34d399;
+  margin-bottom: 5px;
+}
+
+.race-subtitle {
+  font-size: 0.9rem;
+  opacity: 0.7;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #60a5fa, #34d399);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 3px;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.delta-positive {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.delta-negative {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.delta-neutral {
+  background: linear-gradient(135deg, #94a3b8, #64748b) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* Tables */
+.table-container {
+  flex: 1;
+  overflow-y: auto;
+  border-radius: 12px;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.results-table th,
+.results-table td {
+  padding: 8px 6px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.results-table th {
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+}
+
+.results-table tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.boat-highlight {
+  background: rgba(96, 165, 250, 0.2) !important;
+  border-left: 3px solid #60a5fa;
+}
+
+/* Previous races */
+.previous-races {
+  display: grid;
+  gap: 15px;
+}
+
+/* Loading states */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
+  opacity: 0.7;
+}
+
+.spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #60a5fa;
+  animation: spin 1s linear infinite;
+  margin-right: 10px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 12px;
+  padding: 15px;
+  margin: 10px 0;
+  color: #fca5a5;
+  font-size: 0.9rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  opacity: 0.7;
+}
+
+/* Tap hint */
+.tap-hint {
+  position: absolute;
+  bottom: 10px;
+  right: 15px;
+  font-size: 0.7rem;
+  opacity: 0.5;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Admin controls */
+.admin-controls {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 200;
+}
+
+.admin-btn {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.background-upload {
+  display: none;
+}
+
+/* Mobile optimizations */
+@media (max-width: 480px) {
+  .container {
+    padding: 15px;
+  }
+  
+  .flip-card {
+    height: 160px;
+  }
+  
+  .stats-grid {
+    gap: 10px;
+  }
+  
+  .stat-value {
+    font-size: 1.2rem;
+  }
+}
+
+/* iOS safe area */
+@supports (padding: max(0px)) {
+  .container {
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
 }
 </style>
