@@ -19,104 +19,179 @@
     <div class="debug-panel" style="background: rgba(255,255,255,0.1); padding: 10px; margin: 10px 0; border-radius: 8px; font-family: monospace; font-size: 0.8rem;">
       <strong>🔧 DEBUG INFO:</strong><br>
       Event: {{ MAXI_EVENT_ID }} | Class: {{ MAXI_CLASS_ID }}<br>
-      <strong>FLIP CARD:</strong> {{ cardIsFlipped ? 'FLIPPED' : 'NOT FLIPPED' }} | Clicks: {{ flipClickCount }}<br>
+      <strong>SERIES FLIP:</strong> {{ cardIsFlipped ? 'FLIPPED' : 'NOT FLIPPED' }} | Clicks: {{ flipClickCount }}<br>
+      <strong>RACE FLIP:</strong> {{ raceCardIsFlipped ? 'FLIPPED' : 'NOT FLIPPED' }} | Clicks: {{ raceFlipClickCount }}<br>
       <strong>SERIES:</strong> {{ seriesStatus }} ({{ allResults.length }} boats)<br>
       <strong>RACE:</strong> {{ raceStatus }} ({{ raceResults.length }} boats)<br>
       <strong>NORTHSTAR SERIES:</strong> {{ northstarResult?.name || 'Not found' }} ({{ northstarResult?.position || '–' }})<br>
       <strong>NORTHSTAR RACE:</strong> {{ northstarRaceResult?.name || 'Not found' }} ({{ northstarRaceResult?.position || '–' }})
     </div>
 
-    <!-- Test Flip Button -->
+    <!-- Test Flip Buttons -->
     <div style="margin: 10px 0;">
       <button @click="testFlip" style="background: #4ecdc4; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
-        🔄 TEST FLIP (Current: {{ cardIsFlipped ? 'FLIPPED' : 'FRONT' }})
+        🔄 TEST SERIES FLIP ({{ cardIsFlipped ? 'FLIPPED' : 'FRONT' }})
       </button>
-      <button @click="forceShowRaceMetrics" style="background: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
-        🏁 FORCE SHOW RACE METRICS
+      <button @click="testRaceFlip" style="background: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
+        🏁 TEST RACE FLIP ({{ raceCardIsFlipped ? 'FLIPPED' : 'FRONT' }})
       </button>
-      <button @click="cardIsFlipped = false" style="background: #ffd700; color: black; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
-        ⬅️ FORCE FRONT
-      </button>
-      <button @click="cardIsFlipped = true" style="background: #ff9f43; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
-        ➡️ FORCE BACK
+      <button @click="forceShowRaceMetrics" style="background: #ffd700; color: black; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
+        📊 FORCE SHOW RACE METRICS
       </button>
     </div>
 
     <!-- Main Results Section -->
     <main class="results-main">
-      <!-- Latest Race Section -->
+      <!-- Latest Race Section with FLIP CARD -->
       <section class="latest-race-section">
         <h2 class="section-title">🏁 LATEST RACE - R4 RESULTS</h2>
-        <p class="section-subtitle">Race 4 • 14/09/2024 • 5-Metric Analysis</p>
+        <p class="section-subtitle">Race 4 • 14/09/2024 • CLICK CARD TO FLIP</p>
         
-        <!-- FORCED 5-METRIC DISPLAY -->
-        <div class="race-card">
-          <div class="race-info">
-            <h3>Race R4 - NORTHSTAR Performance</h3>
-            <span class="race-date">14/09/2024</span>
-          </div>
-          
-          <!-- ALWAYS SHOW 5 METRICS (forced display) -->
-          <div class="race-stats-5-metric">
-            <div class="metric-item">
-              <span class="metric-label">Position</span>
-              <span class="metric-value position-color">
-                {{ forceRaceDisplay ? forceRaceDisplay.position : (northstarRaceResult?.position || 'Loading...') }}
-              </span>
-            </div>
+        <!-- RACE FLIP CARD -->
+        <div class="race-flip-card-container" @click="testRaceFlip">
+          <div class="race-flip-card-inner" :class="{ 'flipped': raceCardIsFlipped }">
             
-            <div class="metric-item">
-              <span class="metric-label">Finish Time</span>
-              <span class="metric-value time-color">
-                {{ forceRaceDisplay ? forceRaceDisplay.finishTime : (northstarRaceResult?.finishTime || 'Loading...') }}
-              </span>
+            <!-- RACE FRONT SIDE - 5 Metrics -->
+            <div class="race-flip-card-front">
+              <div class="race-card-header">
+                <h3>🏁 Race R4 - NORTHSTAR Performance</h3>
+                <div class="race-flip-indicators">
+                  <span class="race-date">14/09/2024</span>
+                  <span class="race-flip-indicator">{{ raceCardIsFlipped ? 'BACK' : 'FRONT' }}</span>
+                </div>
+              </div>
+              
+              <!-- 5-Metric Display -->
+              <div class="race-stats-5-metric">
+                <div class="metric-item">
+                  <span class="metric-label">Position</span>
+                  <span class="metric-value position-color">
+                    {{ forceRaceDisplay ? forceRaceDisplay.position : (northstarRaceResult?.position || 'RET') }}
+                  </span>
+                </div>
+                
+                <div class="metric-item">
+                  <span class="metric-label">Finish Time</span>
+                  <span class="metric-value time-color">
+                    {{ forceRaceDisplay ? forceRaceDisplay.finishTime : (northstarRaceResult?.finishTime || 'RET') }}
+                  </span>
+                </div>
+                
+                <div class="metric-item">
+                  <span class="metric-label">Δ to 1st</span>
+                  <span class="metric-value delta-color">
+                    {{ forceRaceDisplay ? forceRaceDisplay.deltaToFirst : (northstarRaceResult?.deltaToFirst || 'RET') }}
+                  </span>
+                </div>
+                
+                <div class="metric-item">
+                  <span class="metric-label">Δ to Ahead</span>
+                  <span class="metric-value delta-color">
+                    {{ forceRaceDisplay ? forceRaceDisplay.deltaToAhead : (northstarRaceResult?.deltaToAhead || 'RET') }}
+                  </span>
+                  <span class="boat-name-mini" v-if="forceRaceDisplay?.boatAheadName || northstarRaceResult?.boatAheadName">
+                    {{ forceRaceDisplay?.boatAheadName || northstarRaceResult?.boatAheadName }}
+                  </span>
+                </div>
+                
+                <div class="metric-item">
+                  <span class="metric-label">Δ to Behind</span>
+                  <span class="metric-value delta-color">
+                    {{ forceRaceDisplay ? forceRaceDisplay.deltaToBehind : (northstarRaceResult?.deltaToBehind || 'RET') }}
+                  </span>
+                  <span class="boat-name-mini" v-if="forceRaceDisplay?.boatBehindName || northstarRaceResult?.boatBehindName">
+                    {{ forceRaceDisplay?.boatBehindName || northstarRaceResult?.boatBehindName }}
+                  </span>
+                </div>
+              </div>
+              
+              <div class="race-flip-instruction">🔄 CLICK TO FLIP FOR FULL RACE TABLE</div>
             </div>
-            
-            <div class="metric-item">
-              <span class="metric-label">Δ to 1st</span>
-              <span class="metric-value delta-color">
-                {{ forceRaceDisplay ? forceRaceDisplay.deltaToFirst : (northstarRaceResult?.deltaToFirst || 'Loading...') }}
-              </span>
-            </div>
-            
-            <div class="metric-item">
-              <span class="metric-label">Δ to Ahead</span>
-              <span class="metric-value delta-color">
-                {{ forceRaceDisplay ? forceRaceDisplay.deltaToAhead : (northstarRaceResult?.deltaToAhead || 'Loading...') }}
-              </span>
-              <span class="boat-name-mini" v-if="forceRaceDisplay?.boatAheadName || northstarRaceResult?.boatAheadName">
-                {{ forceRaceDisplay?.boatAheadName || northstarRaceResult?.boatAheadName }}
-              </span>
-            </div>
-            
-            <div class="metric-item">
-              <span class="metric-label">Δ to Behind</span>
-              <span class="metric-value delta-color">
-                {{ forceRaceDisplay ? forceRaceDisplay.deltaToBehind : (northstarRaceResult?.deltaToBehind || 'Loading...') }}
-              </span>
-              <span class="boat-name-mini" v-if="forceRaceDisplay?.boatBehindName || northstarRaceResult?.boatBehindName">
-                {{ forceRaceDisplay?.boatBehindName || northstarRaceResult?.boatBehindName }}
-              </span>
-            </div>
-          </div>
 
-          <!-- Debug Race Info -->
-          <div class="race-debug-mini" style="margin-top: 15px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.7rem;">
-            <strong>RACE DATA:</strong>
-            Loading: {{ loadingRace }} | 
-            Error: {{ raceErrorMessage || 'None' }} | 
-            Results: {{ raceResults.length }} boats | 
-            NORTHSTAR Found: {{ !!northstarRaceResult }}
+            <!-- RACE BACK SIDE - Full Race Results Table -->
+            <div class="race-flip-card-back">
+              <div class="race-card-header">
+                <h3>📊 Full Race R4 Results</h3>
+                <div class="race-flip-indicators">
+                  <span class="race-date">14/09/2024</span>
+                  <span class="race-flip-indicator">{{ raceCardIsFlipped ? 'BACK' : 'FRONT' }}</span>
+                </div>
+              </div>
+              
+              <div class="race-back-content">
+                <div class="race-results-table">
+                  <div class="race-table-header">
+                    <span>Pos</span>
+                    <span>Yacht</span>
+                    <span>Finish</span>
+                    <span>Corrected</span>
+                    <span>Status</span>
+                  </div>
+                  
+                  <!-- Sample race results - replace with actual data -->
+                  <div class="race-table-row highlight">
+                    <span>RET</span>
+                    <span class="boat-name">NORTHSTAR OF LONDON</span>
+                    <span class="race-finish">RET</span>
+                    <span class="race-corrected">RET</span>
+                    <span class="race-status retired">RETIRED</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>1</span>
+                    <span class="boat-name">PROTEUS</span>
+                    <span class="race-finish">12:45:32</span>
+                    <span class="race-corrected">12:45:32</span>
+                    <span class="race-status finished">FINISHED</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>2</span>
+                    <span class="boat-name">JOLT</span>
+                    <span class="race-finish">12:47:18</span>
+                    <span class="race-corrected">12:47:18</span>
+                    <span class="race-status finished">FINISHED</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>3</span>
+                    <span class="boat-name">JETHOU</span>
+                    <span class="race-finish">12:49:45</span>
+                    <span class="race-corrected">12:49:45</span>
+                    <span class="race-status finished">FINISHED</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>4</span>
+                    <span class="boat-name">WALLYNO</span>
+                    <span class="race-finish">12:52:12</span>
+                    <span class="race-corrected">12:52:12</span>
+                    <span class="race-status finished">FINISHED</span>
+                  </div>
+                </div>
+                
+                <!-- Debug Race Info -->
+                <div class="race-debug-mini" style="margin-top: 15px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.7rem;">
+                  <strong>RACE DATA:</strong>
+                  Loading: {{ loadingRace }} | 
+                  Error: {{ raceErrorMessage || 'None' }} | 
+                  Results: {{ raceResults.length }} boats | 
+                  NORTHSTAR Found: {{ !!northstarRaceResult }}
+                </div>
+              </div>
+              
+              <div class="race-flip-instruction">🔄 CLICK TO FLIP BACK TO METRICS</div>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- FORCED FLIP CARD SECTION -->
+      <!-- SERIES FLIP CARD SECTION -->
       <section class="series-section">
         <h2 class="section-title">🔄 SERIES RESULTS OVERALL</h2>
         <p class="section-subtitle">CLICK THE CARD BELOW TO FLIP IT</p>
         
-        <!-- SIMPLIFIED FLIP CARD -->
+        <!-- SERIES FLIP CARD -->
         <div class="flip-card-container" @click="testFlip">
           <div class="flip-card-inner" :class="{ 'flipped': cardIsFlipped }">
             
@@ -214,6 +289,8 @@ const MAXI_CLASS_ID = 'M2'
 // Reactive state
 const cardIsFlipped = ref(false)
 const flipClickCount = ref(0)
+const raceCardIsFlipped = ref(false)  // NEW: separate state for race card
+const raceFlipClickCount = ref(0)     // NEW: separate click counter
 const allResults = ref([])
 const raceResults = ref([])
 const northstarResult = ref(null)
@@ -241,13 +318,20 @@ const forceRaceDisplay = ref({
 const testFlip = () => {
   cardIsFlipped.value = !cardIsFlipped.value
   flipClickCount.value++
-  console.log('🔄 FLIP TEST:', cardIsFlipped.value, 'Clicks:', flipClickCount.value)
+  console.log('🔄 SERIES FLIP TEST:', cardIsFlipped.value, 'Clicks:', flipClickCount.value)
+}
+
+// NEW: Test function for race flip
+const testRaceFlip = () => {
+  raceCardIsFlipped.value = !raceCardIsFlipped.value
+  raceFlipClickCount.value++
+  console.log('🏁 RACE FLIP TEST:', raceCardIsFlipped.value, 'Clicks:', raceFlipClickCount.value)
 }
 
 const forceShowRaceMetrics = () => {
   console.log('🏁 FORCING RACE METRICS DISPLAY')
   forceRaceDisplay.value = {
-    position: '4th',
+    position: 'RET',
     finishTime: 'RET',
     deltaToFirst: 'RET',
     deltaToAhead: 'RET',
@@ -428,30 +512,75 @@ onMounted(async () => {
   letter-spacing: 0.5px;
 }
 
-/* Race Card */
+/* RACE FLIP CARD STYLES */
 .latest-race-section {
   margin-bottom: 40px;
 }
 
-.race-card {
+.race-flip-card-container {
+  width: 100%;
+  height: 400px;
+  perspective: 1000px;
+  cursor: pointer;
+  position: relative;
+}
+
+.race-flip-card-container:hover {
+  transform: scale(1.02);
+  transition: transform 0.3s ease;
+}
+
+.race-flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  text-align: left;
+  transition: transform 0.8s;
+  transform-style: preserve-3d;
+}
+
+.race-flip-card-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.race-flip-card-front, .race-flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 20px;
   padding: 25px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
 }
 
-.race-info {
+.race-flip-card-back {
+  transform: rotateY(180deg);
+}
+
+.race-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.race-info h3 {
-  font-size: 1.4rem;
+.race-card-header h3 {
+  font-size: 1.3rem;
   margin: 0;
+}
+
+.race-flip-indicators {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .race-date {
@@ -461,12 +590,21 @@ onMounted(async () => {
   font-size: 0.9rem;
 }
 
+.race-flip-indicator {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 /* 5-Metric Display */
 .race-stats-5-metric {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 15px;
   margin-bottom: 20px;
+  flex: 1;
 }
 
 .metric-item {
@@ -505,7 +643,80 @@ onMounted(async () => {
 .time-color { color: #4ecdc4; font-family: monospace; }
 .delta-color { color: #ff9f43; font-family: monospace; }
 
-/* Flip Card */
+/* Race Results Table */
+.race-back-content {
+  flex: 1;
+}
+
+.race-results-table {
+  font-size: 0.85rem;
+}
+
+.race-table-header {
+  display: grid;
+  grid-template-columns: 40px 1fr 70px 60px 70px;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 10px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.race-table-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 70px 60px 70px;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  align-items: center;
+}
+
+.race-table-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.race-table-row.highlight {
+  background: rgba(255, 215, 0, 0.1);
+  border-left: 3px solid #ffd700;
+  border-radius: 4px;
+}
+
+.race-finish, .race-corrected {
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.race-status {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 6px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.race-status.finished {
+  background: rgba(0, 255, 0, 0.1);
+  color: #4ecdc4;
+}
+
+.race-status.retired {
+  background: rgba(255, 107, 107, 0.1);
+  color: #ff6b6b;
+}
+
+.race-flip-instruction {
+  text-align: center;
+  font-size: 0.85rem;
+  opacity: 0.7;
+  margin-top: auto;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
+/* SERIES FLIP CARD STYLES (existing) */
 .series-section {
   margin-bottom: 40px;
 }
