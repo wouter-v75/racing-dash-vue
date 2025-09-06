@@ -1023,11 +1023,11 @@ onMounted(async () => {
   }
   
   .race-table-header, .race-table-row {
-    grid-template-columns: 30px 1fr 60px 60px;
+    grid-template-columns: 30px 1fr 50px 50px;
     gap: 4px;
   }
   
-  .race-finish, .race-corrected {
+  .race-finish, .race-elapsed, .race-corrected {
     display: none;
   }
 }
