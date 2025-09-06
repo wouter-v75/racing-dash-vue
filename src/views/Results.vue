@@ -28,11 +28,17 @@
 
     <!-- Test Flip Button -->
     <div style="margin: 10px 0;">
-      <button @click="testFlip" style="background: #4ecdc4; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+      <button @click="testFlip" style="background: #4ecdc4; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
         🔄 TEST FLIP (Current: {{ cardIsFlipped ? 'FLIPPED' : 'FRONT' }})
       </button>
-      <button @click="forceShowRaceMetrics" style="background: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-left: 10px;">
+      <button @click="forceShowRaceMetrics" style="background: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
         🏁 FORCE SHOW RACE METRICS
+      </button>
+      <button @click="cardIsFlipped = false" style="background: #ffd700; color: black; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
+        ⬅️ FORCE FRONT
+      </button>
+      <button @click="cardIsFlipped = true" style="background: #ff9f43; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+        ➡️ FORCE BACK
       </button>
     </div>
 
