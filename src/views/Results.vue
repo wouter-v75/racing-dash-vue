@@ -1033,7 +1033,7 @@ onMounted(async () => {
   }
   
   .race-table-header, .race-table-row {
-    grid-template-columns: 30px 1fr 60px;
+    grid-template-columns: 30px 1fr 60px 60px;
     gap: 4px;
   }
   
