@@ -1,7 +1,6 @@
 <template>
   <div class="results-container">
     <!-- Header Section -->
-     <!-- Results.vue -->
     <header class="regatta-header">
       <div class="header-content">
         <h1 class="regatta-title">Maxi Yacht Rolex Cup 2024</h1>
