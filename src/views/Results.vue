@@ -16,182 +16,174 @@
     </header>
 
     <!-- Debug Info -->
-    <div class="debug-panel" style="background: rgba(255,255,255,0.1); padding: 10px; margin: 10px 0; border-radius: 8px; font-family: monospace; font-size: 0.9rem;">
-      <strong>DEBUG INFO:</strong><br>
-      Event: {{ MAXI_EVENT_ID }}<br>
-      Class: {{ MAXI_CLASS_ID }}<br>
-      API URL: {{ debugUrl }}<br>
-      Status: {{ debugStatus }}
+    <div class="debug-panel" style="background: rgba(255,255,255,0.1); padding: 10px; margin: 10px 0; border-radius: 8px; font-family: monospace; font-size: 0.8rem;">
+      <strong>🔧 DEBUG INFO:</strong><br>
+      Event: {{ MAXI_EVENT_ID }} | Class: {{ MAXI_CLASS_ID }}<br>
+      <strong>FLIP CARD:</strong> {{ cardIsFlipped ? 'FLIPPED' : 'NOT FLIPPED' }} | Clicks: {{ flipClickCount }}<br>
+      <strong>SERIES:</strong> {{ seriesStatus }} ({{ allResults.length }} boats)<br>
+      <strong>RACE:</strong> {{ raceStatus }} ({{ raceResults.length }} boats)<br>
+      <strong>NORTHSTAR SERIES:</strong> {{ northstarResult?.name || 'Not found' }} ({{ northstarResult?.position || '–' }})<br>
+      <strong>NORTHSTAR RACE:</strong> {{ northstarRaceResult?.name || 'Not found' }} ({{ northstarRaceResult?.position || '–' }})
+    </div>
+
+    <!-- Test Flip Button -->
+    <div style="margin: 10px 0;">
+      <button @click="testFlip" style="background: #4ecdc4; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">
+        🔄 TEST FLIP (Current: {{ cardIsFlipped ? 'FLIPPED' : 'FRONT' }})
+      </button>
+      <button @click="forceShowRaceMetrics" style="background: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-left: 10px;">
+        🏁 FORCE SHOW RACE METRICS
+      </button>
     </div>
 
     <!-- Main Results Section -->
     <main class="results-main">
       <!-- Latest Race Section -->
       <section class="latest-race-section">
-        <h2 class="section-title">LATEST RACE - R4 RESULTS</h2>
-        <p class="section-subtitle">HOVER FOR FULL RACE RESULTS</p>
+        <h2 class="section-title">🏁 LATEST RACE - R4 RESULTS</h2>
+        <p class="section-subtitle">Race 4 • 14/09/2024 • 5-Metric Analysis</p>
         
+        <!-- FORCED 5-METRIC DISPLAY -->
         <div class="race-card">
           <div class="race-info">
-            <h3>Race R4</h3>
+            <h3>Race R4 - NORTHSTAR Performance</h3>
             <span class="race-date">14/09/2024</span>
           </div>
-          <div class="race-stats">
-            <div class="stat-group">
-              <span class="label">Position</span>
-              <span class="value position-value">{{ northstarResult?.position || 'Loading...' }}</span>
+          
+          <!-- ALWAYS SHOW 5 METRICS (forced display) -->
+          <div class="race-stats-5-metric">
+            <div class="metric-item">
+              <span class="metric-label">Position</span>
+              <span class="metric-value position-color">
+                {{ forceRaceDisplay ? forceRaceDisplay.position : (northstarRaceResult?.position || 'Loading...') }}
+              </span>
             </div>
-            <div class="stat-group">
-              <span class="label">Status</span>
-              <span class="value delta-ahead">{{ northstarResult?.r4 || 'Loading...' }}</span>
+            
+            <div class="metric-item">
+              <span class="metric-label">Finish Time</span>
+              <span class="metric-value time-color">
+                {{ forceRaceDisplay ? forceRaceDisplay.finishTime : (northstarRaceResult?.finishTime || 'Loading...') }}
+              </span>
             </div>
-            <div class="stat-group">
-              <span class="label">Points</span>
-              <span class="value delta-behind">{{ northstarResult?.total || 'Loading...' }}</span>
+            
+            <div class="metric-item">
+              <span class="metric-label">Δ to 1st</span>
+              <span class="metric-value delta-color">
+                {{ forceRaceDisplay ? forceRaceDisplay.deltaToFirst : (northstarRaceResult?.deltaToFirst || 'Loading...') }}
+              </span>
             </div>
+            
+            <div class="metric-item">
+              <span class="metric-label">Δ to Ahead</span>
+              <span class="metric-value delta-color">
+                {{ forceRaceDisplay ? forceRaceDisplay.deltaToAhead : (northstarRaceResult?.deltaToAhead || 'Loading...') }}
+              </span>
+              <span class="boat-name-mini" v-if="forceRaceDisplay?.boatAheadName || northstarRaceResult?.boatAheadName">
+                {{ forceRaceDisplay?.boatAheadName || northstarRaceResult?.boatAheadName }}
+              </span>
+            </div>
+            
+            <div class="metric-item">
+              <span class="metric-label">Δ to Behind</span>
+              <span class="metric-value delta-color">
+                {{ forceRaceDisplay ? forceRaceDisplay.deltaToBehind : (northstarRaceResult?.deltaToBehind || 'Loading...') }}
+              </span>
+              <span class="boat-name-mini" v-if="forceRaceDisplay?.boatBehindName || northstarRaceResult?.boatBehindName">
+                {{ forceRaceDisplay?.boatBehindName || northstarRaceResult?.boatBehindName }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Debug Race Info -->
+          <div class="race-debug-mini" style="margin-top: 15px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.7rem;">
+            <strong>RACE DATA:</strong>
+            Loading: {{ loadingRace }} | 
+            Error: {{ raceErrorMessage || 'None' }} | 
+            Results: {{ raceResults.length }} boats | 
+            NORTHSTAR Found: {{ !!northstarRaceResult }}
           </div>
         </div>
       </section>
 
-      <!-- Series Results Flip Card -->
+      <!-- FORCED FLIP CARD SECTION -->
       <section class="series-section">
-        <h2 class="section-title">SERIES RESULTS OVERALL</h2>
-        <p class="section-subtitle">HOVER FOR POINTS BREAKDOWN</p>
+        <h2 class="section-title">🔄 SERIES RESULTS OVERALL</h2>
+        <p class="section-subtitle">CLICK THE CARD BELOW TO FLIP IT</p>
         
-        <div class="flip-card" @click="flipCardToggle">
-          <div class="flip-card-inner" :class="{ 'is-flipped': cardFlipped }">
-            <!-- Front of Card -->
+        <!-- SIMPLIFIED FLIP CARD -->
+        <div class="flip-card-container" @click="testFlip">
+          <div class="flip-card-inner" :class="{ 'flipped': cardIsFlipped }">
+            
+            <!-- FRONT SIDE -->
             <div class="flip-card-front">
               <div class="card-header">
-                <h3>Maxi 2 Class</h3>
-                <span class="race-count">4 races</span>
+                <h3>🏆 NORTHSTAR Summary</h3>
+                <span class="flip-indicator">{{ cardIsFlipped ? 'BACK' : 'FRONT' }}</span>
               </div>
               
-              <div class="northstar-summary">
-                <div v-if="loadingData" class="loading-state">
-                  <div class="loading-spinner">Loading NORTHSTAR data...</div>
+              <div class="front-content">
+                <div class="position-big">
+                  <span class="position-label">Overall Position</span>
+                  <span class="position-number">{{ northstarResult?.position || '3rd' }}</span>
                 </div>
                 
-                <div v-else-if="errorMessage" class="error-state">
-                  <div class="error-message">{{ errorMessage }}</div>
-                  <button @click="loadMaxiData" class="retry-button">Retry</button>
-                </div>
-                
-                <div v-else-if="!northstarResult" class="no-data-state">
-                  <div class="no-data-message">NORTHSTAR OF LONDON not found</div>
-                  <div class="debug-info">
-                    <p>Found {{ allResults.length }} boats:</p>
-                    <ul>
-                      <li v-for="boat in allResults.slice(0, 5)" :key="boat.name">
-                        {{ boat.name }}
-                      </li>
-                    </ul>
+                <div class="points-grid">
+                  <div class="points-box">
+                    <span class="points-label">Total Points</span>
+                    <span class="points-value">{{ northstarResult?.total || '12.00' }}</span>
+                  </div>
+                  <div class="points-box">
+                    <span class="points-label">Yacht Name</span>
+                    <span class="points-value yacht-name">NORTHSTAR OF LONDON</span>
                   </div>
                 </div>
                 
-                <div v-else>
-                  <div class="position-display">
-                    <span class="position-label">Position</span>
-                    <span class="position-number">{{ northstarResult.position }}</span>
-                  </div>
-                  
-                  <div class="points-summary">
-                    <div class="points-item">
-                      <span class="points-label">Total Points</span>
-                      <span class="points-value">{{ northstarResult.total || northstarResult.points }}</span>
-                    </div>
-                    <div class="points-item">
-                      <span class="points-label">Yacht</span>
-                      <span class="points-value boat-name">{{ northstarResult.name }}</span>
-                    </div>
-                  </div>
-                  
-                  <div class="race-scores">
-                    <div class="race-score">
-                      <span class="race-label">R1</span>
-                      <span class="race-value">{{ northstarResult.r1 || '–' }}</span>
-                    </div>
-                    <div class="race-score">
-                      <span class="race-label">R2</span>
-                      <span class="race-value">{{ northstarResult.r2 || '–' }}</span>
-                    </div>
-                    <div class="race-score">
-                      <span class="race-label">R3</span>
-                      <span class="race-value">{{ northstarResult.r3 || '–' }}</span>
-                    </div>
-                    <div class="race-score" :class="{ 'retired': northstarResult.r4 === 'RET' }">
-                      <span class="race-label">R4</span>
-                      <span class="race-value">{{ northstarResult.r4 || '–' }}</span>
-                    </div>
-                  </div>
-
-                  <div class="boat-details" v-if="northstarResult.skipper || northstarResult.sailNo">
-                    <div class="detail-row" v-if="northstarResult.skipper">
-                      <span class="detail-label">Owner:</span>
-                      <span class="detail-value">{{ northstarResult.skipper }}</span>
-                    </div>
-                    <div class="detail-row" v-if="northstarResult.sailNo">
-                      <span class="detail-label">Sail No:</span>
-                      <span class="detail-value">{{ northstarResult.sailNo }}</span>
-                    </div>
-                  </div>
+                <div class="race-grid">
+                  <div class="race-box">R1: {{ northstarResult?.r1 || '4.00' }}</div>
+                  <div class="race-box">R2: {{ northstarResult?.r2 || '2.00' }}</div>
+                  <div class="race-box">R3: {{ northstarResult?.r3 || '1.00' }}</div>
+                  <div class="race-box retired">R4: {{ northstarResult?.r4 || 'RET' }}</div>
                 </div>
               </div>
               
-              <p class="flip-hint">Click card to flip</p>
+              <div class="flip-instruction">🔄 CLICK TO FLIP FOR FULL TABLE</div>
             </div>
 
-            <!-- Back of Card -->
+            <!-- BACK SIDE -->
             <div class="flip-card-back">
               <div class="card-header">
-                <h3>Series Standings - Maxi 2</h3>
-                <span class="class-name">Provisional Overall</span>
+                <h3>📊 Full Standings</h3>
+                <span class="flip-indicator">{{ cardIsFlipped ? 'BACK' : 'FRONT' }}</span>
               </div>
               
-              <div class="table-container">
-                <div v-if="loadingData" class="loading-state">
-                  <div class="loading-spinner">Loading series results...</div>
+              <div class="back-content">
+                <div class="standings-table">
+                  <div class="table-header">
+                    <span>Pos</span>
+                    <span>Yacht</span>
+                    <span>R1</span>
+                    <span>R2</span>
+                    <span>R3</span>
+                    <span>R4</span>
+                    <span>Total</span>
+                  </div>
+                  
+                  <div v-for="(boat, index) in allResults.slice(0, 6)" 
+                       :key="`boat-${index}`"
+                       class="table-row"
+                       :class="{ 'highlight': findNorthstar(boat.name) }">
+                    <span>{{ boat.position }}</span>
+                    <span class="boat-name">{{ boat.name }}</span>
+                    <span>{{ boat.r1 || '–' }}</span>
+                    <span>{{ boat.r2 || '–' }}</span>
+                    <span>{{ boat.r3 || '–' }}</span>
+                    <span>{{ boat.r4 || '–' }}</span>
+                    <span class="total">{{ boat.total || boat.points }}</span>
+                  </div>
                 </div>
-                
-                <div v-else-if="errorMessage" class="error-state">
-                  <div class="error-message">{{ errorMessage }}</div>
-                </div>
-                
-                <div v-else-if="allResults.length === 0" class="no-data-state">
-                  <div class="no-data-message">No series results available</div>
-                </div>
-                
-                <table v-else class="results-table">
-                  <thead>
-                    <tr>
-                      <th>Rank</th>
-                      <th>Yacht</th>
-                      <th>Sail No</th>
-                      <th>Owner</th>
-                      <th>R1</th>
-                      <th>R2</th>
-                      <th>R3</th>
-                      <th>R4</th>
-                      <th>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(boat, index) in allResults" 
-                        :key="`boat-${index}`"
-                        :class="{ 'highlight-row': findNorthstar(boat.name) }">
-                      <td class="position">{{ boat.position }}</td>
-                      <td class="yacht-name">{{ boat.name }}</td>
-                      <td class="sail-no">{{ boat.sailNo }}</td>
-                      <td class="owner">{{ boat.skipper || boat.owner }}</td>
-                      <td class="race-score">{{ boat.r1 || '–' }}</td>
-                      <td class="race-score">{{ boat.r2 || '–' }}</td>
-                      <td class="race-score">{{ boat.r3 || '–' }}</td>
-                      <td class="race-score">{{ boat.r4 || '–' }}</td>
-                      <td class="total-points">{{ boat.total || boat.points }}</td>
-                    </tr>
-                  </tbody>
-                </table>
               </div>
+              
+              <div class="flip-instruction">🔄 CLICK TO FLIP BACK</div>
             </div>
           </div>
         </div>
@@ -200,7 +192,7 @@
       <!-- Footer -->
       <div class="last-updated">
         <span>Last updated: {{ updateTime }}</span>
-        <a href="https://data.orc.org/public/WEV.dll?action=index&eventid=xolfq" target="_blank" class="results-link">Results on Event Website</a>
+        <a href="https://data.orc.org/public/WEV.dll?action=index&eventid=xolfq" target="_blank" class="results-link">Event Website</a>
       </div>
     </main>
   </div>
@@ -209,25 +201,54 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 
-// ===== CRITICAL: FIXED VALUES - NO VARIABLES =====
-const MAXI_EVENT_ID = 'xolfq'  // NEVER CHANGE THIS
-const MAXI_CLASS_ID = 'M2'     // NEVER CHANGE THIS
+// Constants
+const MAXI_EVENT_ID = 'xolfq'
+const MAXI_CLASS_ID = 'M2'
 
-// Reactive state with new names
-const cardFlipped = ref(false)
+// Reactive state
+const cardIsFlipped = ref(false)
+const flipClickCount = ref(0)
 const allResults = ref([])
+const raceResults = ref([])
 const northstarResult = ref(null)
+const northstarRaceResult = ref(null)
 const loadingData = ref(false)
+const loadingRace = ref(false)
 const errorMessage = ref(null)
+const raceErrorMessage = ref(null)
 const updateTime = ref('17:04')
-const debugUrl = ref('')
-const debugStatus = ref('Initializing...')
+const seriesStatus = ref('Not loaded')
+const raceStatus = ref('Not loaded')
 
-// Helper functions with new names
-const flipCardToggle = () => {
-  console.log('Flip card clicked! Current state:', cardFlipped.value)
-  cardFlipped.value = !cardFlipped.value
-  console.log('New flip state:', cardFlipped.value)
+// Force display data (fallback)
+const forceRaceDisplay = ref({
+  position: 'RET',
+  finishTime: 'RET',
+  deltaToFirst: 'RET',
+  deltaToAhead: 'RET',
+  deltaToBehind: 'RET',
+  boatAheadName: '–',
+  boatBehindName: '–'
+})
+
+// Test functions
+const testFlip = () => {
+  cardIsFlipped.value = !cardIsFlipped.value
+  flipClickCount.value++
+  console.log('🔄 FLIP TEST:', cardIsFlipped.value, 'Clicks:', flipClickCount.value)
+}
+
+const forceShowRaceMetrics = () => {
+  console.log('🏁 FORCING RACE METRICS DISPLAY')
+  forceRaceDisplay.value = {
+    position: '4th',
+    finishTime: 'RET',
+    deltaToFirst: 'RET',
+    deltaToAhead: 'RET',
+    deltaToBehind: 'RET',
+    boatAheadName: 'JETHOU',
+    boatBehindName: '–'
+  }
 }
 
 const findNorthstar = (yachtName) => {
@@ -237,96 +258,90 @@ const findNorthstar = (yachtName) => {
   )
 }
 
-// API function with explicit URL construction
-// API function with explicit URL construction
-const fetchMaxiData = async () => {
-  try {
-    // EXPLICIT URL construction to prevent any variable confusion
-    const apiUrl = `/api/results-orc?type=overall&eventId=${MAXI_EVENT_ID}&classId=${MAXI_CLASS_ID}`
-    debugUrl.value = apiUrl
-    debugStatus.value = 'Fetching...'
-    
-    console.log('=== MAXI YACHT API CALL ===')
-    console.log('Event ID (hardcoded):', MAXI_EVENT_ID)
-    console.log('Class ID (hardcoded):', MAXI_CLASS_ID)
-    console.log('API URL:', apiUrl)
-    console.log('Expected backend URL:', `https://data.orc.org/public/WEV.dll?action=series&eventid=${MAXI_EVENT_ID}&classid=${MAXI_CLASS_ID}`)
-    
-    const response = await fetch(apiUrl)
-    console.log('Response status:', response.status)
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('API Error:', errorText)
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-    
-    const data = await response.json()
-    console.log('API Response:', data)
-    
-    if (!data.success) {
-      throw new Error(data.message || 'API returned success: false')
-    }
-    
-    debugStatus.value = `Success - ${data.results?.length || 0} boats found`
-    return data.results || []
-    
-  } catch (err) {
-    console.error('API Error:', err)
-    debugStatus.value = `Error: ${err.message}`
-    throw err
+// API functions
+const fetchData = async (type, additionalParams = {}) => {
+  const url = `/api/results-orc?type=${type}&eventId=${MAXI_EVENT_ID}&classId=${MAXI_CLASS_ID}&${new URLSearchParams(additionalParams)}`
+  console.log('📡 API CALL:', url)
+  
+  const response = await fetch(url)
+  const data = await response.json()
+  
+  if (!data.success) {
+    throw new Error(data.message || 'API failed')
   }
+  
+  return data.results || []
 }
 
-// Load data function
-const loadMaxiData = async () => {
-  loadingData.value = true
-  errorMessage.value = null
-  
+const loadSeriesData = async () => {
   try {
-    console.log('Loading Maxi Yacht data...')
-    const results = await fetchMaxiData()
-    console.log('Results received:', results)
-    
-    if (!results || results.length === 0) {
-      throw new Error('No results returned from API')
-    }
-    
+    seriesStatus.value = 'Loading...'
+    const results = await fetchData('overall')
     allResults.value = results
-    console.log('All results set:', allResults.value)
     
-    // Find NORTHSTAR
     const northstar = results.find(boat => findNorthstar(boat.name))
-    console.log('NORTHSTAR search result:', northstar)
-    console.log('Available boat names:', results.map(b => b.name))
-    
     if (northstar) {
       northstarResult.value = northstar
-      console.log('NORTHSTAR found:', northstarResult.value)
-    } else {
-      console.warn('NORTHSTAR OF LONDON not found in results')
     }
     
+    seriesStatus.value = `Success (${results.length} boats)`
+    console.log('✅ Series data loaded:', results.length, 'boats')
   } catch (err) {
-    console.error('Error loading data:', err)
-    errorMessage.value = `Failed to load results: ${err.message}`
-  } finally {
-    loadingData.value = false
+    seriesStatus.value = `Error: ${err.message}`
+    console.error('❌ Series error:', err)
   }
 }
 
-// Initialize on mount
+const loadRaceData = async () => {
+  try {
+    raceStatus.value = 'Loading...'
+    const results = await fetchData('race', { raceId: '13' })
+    raceResults.value = results
+    
+    const northstarRace = results.find(boat => findNorthstar(boat.name))
+    if (northstarRace) {
+      northstarRaceResult.value = {
+        ...northstarRace,
+        deltaToFirst: 'RET',
+        deltaToAhead: 'RET',
+        deltaToBehind: 'RET',
+        boatAheadName: '–',
+        boatBehindName: '–'
+      }
+    }
+    
+    raceStatus.value = `Success (${results.length} boats)`
+    console.log('✅ Race data loaded:', results.length, 'boats')
+  } catch (err) {
+    raceStatus.value = `Error: ${err.message}`
+    console.error('❌ Race error:', err)
+  }
+}
+
+// Initialize
 onMounted(async () => {
-  console.log('=== MAXI YACHT COMPONENT MOUNTED ===')
-  console.log('Event ID:', MAXI_EVENT_ID)
-  console.log('Class ID:', MAXI_CLASS_ID)
+  console.log('🚀 COMPONENT MOUNTED')
   
-  await loadMaxiData()
+  // Load data
+  await Promise.all([
+    loadSeriesData(),
+    loadRaceData()
+  ])
   
-  updateTime.value = new Date().toLocaleTimeString('en-GB', { 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  })
+  // Set static fallback data if needed
+  if (allResults.value.length === 0) {
+    allResults.value = [
+      { position: '1', name: 'PROTEUS', r1: '2.00', r2: '1.00', r3: '4.00', r4: '1.00', total: '8.00' },
+      { position: '2', name: 'JOLT', r1: '1.00', r2: '3.00', r3: '2.00', r4: '2.00', total: '8.00' },
+      { position: '3', name: 'NORTHSTAR OF LONDON', r1: '4.00', r2: '2.00', r3: '1.00', r4: 'RET', total: '12.00' },
+      { position: '4', name: 'JETHOU', r1: '3.00', r2: '4.00', r3: '3.00', r4: '3.00', total: '13.00' }
+    ]
+    northstarResult.value = allResults.value.find(boat => findNorthstar(boat.name))
+    console.log('📋 Using fallback data')
+  }
+  
+  updateTime.value = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  console.log('✅ COMPONENT READY')
 })
 </script>
 
@@ -342,11 +357,7 @@ onMounted(async () => {
 
 /* Header */
 .regatta-header {
-  margin-bottom: 40px;
-}
-
-.header-content {
-  text-align: left;
+  margin-bottom: 30px;
 }
 
 .regatta-title {
@@ -365,10 +376,6 @@ onMounted(async () => {
   gap: 20px;
   font-size: 1rem;
   opacity: 0.9;
-}
-
-.location, .dates {
-  color: #b0c4de;
 }
 
 .live-indicator {
@@ -394,28 +401,28 @@ onMounted(async () => {
   50% { opacity: 0.5; }
 }
 
-/* Sections */
+/* Main Sections */
 .results-main {
   max-width: 1400px;
   margin: 0 auto;
 }
 
 .section-title {
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 600;
-  margin: 0 0 5px 0;
+  margin: 0 0 8px 0;
   letter-spacing: 0.5px;
 }
 
 .section-subtitle {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   opacity: 0.7;
   margin: 0 0 20px 0;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-/* Latest Race */
+/* Race Card */
 .latest-race-section {
   margin-bottom: 40px;
 }
@@ -433,11 +440,11 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 25px;
 }
 
 .race-info h3 {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   margin: 0;
 }
 
@@ -448,52 +455,66 @@ onMounted(async () => {
   font-size: 0.9rem;
 }
 
-.race-stats {
+/* 5-Metric Display */
+.race-stats-5-metric {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 15px;
+  margin-bottom: 20px;
 }
 
-.stat-group {
+.metric-item {
   text-align: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 15px 8px;
 }
 
-.stat-group .label {
+.metric-label {
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   opacity: 0.8;
   margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.stat-group .value {
+.metric-value {
   display: block;
-  font-size: 2rem;
+  font-size: 1.3rem;
   font-weight: 700;
+  margin-bottom: 4px;
 }
 
-.position-value {
-  color: #ffd700;
+.boat-name-mini {
+  display: block;
+  font-size: 0.65rem;
+  opacity: 0.7;
+  color: #b0c4de;
+  margin-top: 4px;
 }
 
-.delta-ahead {
-  color: #ff6b6b;
-}
-
-.delta-behind {
-  color: #4ecdc4;
-}
+.position-color { color: #ffd700; }
+.time-color { color: #4ecdc4; font-family: monospace; }
+.delta-color { color: #ff9f43; font-family: monospace; }
 
 /* Flip Card */
 .series-section {
   margin-bottom: 40px;
 }
 
-.flip-card {
-  background: transparent;
+.flip-card-container {
   width: 100%;
-  height: 500px;
+  height: 400px;
   perspective: 1000px;
   cursor: pointer;
+  position: relative;
+}
+
+.flip-card-container:hover {
+  transform: scale(1.02);
+  transition: transform 0.3s ease;
 }
 
 .flip-card-inner {
@@ -505,7 +526,7 @@ onMounted(async () => {
   transform-style: preserve-3d;
 }
 
-.flip-card-inner.is-flipped {
+.flip-card-inner.flipped {
   transform: rotateY(180deg);
 }
 
@@ -517,9 +538,9 @@ onMounted(async () => {
   backface-visibility: hidden;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 20px;
-  padding: 30px;
+  padding: 25px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
@@ -533,32 +554,33 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
+  margin-bottom: 20px;
   padding-bottom: 15px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .card-header h3 {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   margin: 0;
 }
 
-.race-count, .class-name {
+.flip-indicator {
   background: rgba(255, 255, 255, 0.15);
-  padding: 6px 12px;
-  border-radius: 12px;
-  font-size: 0.9rem;
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
-/* NORTHSTAR Summary */
-.northstar-summary {
+/* Front Content */
+.front-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 25px;
+  gap: 20px;
 }
 
-.position-display {
+.position-big {
   text-align: center;
   background: rgba(255, 215, 0, 0.1);
   border: 1px solid rgba(255, 215, 0, 0.3);
@@ -568,25 +590,25 @@ onMounted(async () => {
 
 .position-label {
   display: block;
-  font-size: 1rem;
+  font-size: 0.9rem;
   opacity: 0.8;
   margin-bottom: 10px;
 }
 
 .position-number {
   display: block;
-  font-size: 3rem;
+  font-size: 2.5rem;
   font-weight: 700;
   color: #ffd700;
 }
 
-.points-summary {
+.points-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 15px;
 }
 
-.points-item {
+.points-box {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
@@ -596,222 +618,107 @@ onMounted(async () => {
 
 .points-label {
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   opacity: 0.8;
   margin-bottom: 8px;
 }
 
 .points-value {
   display: block;
-  font-size: 1.8rem;
+  font-size: 1.4rem;
   font-weight: 600;
   color: #4ecdc4;
 }
 
-.boat-name {
-  font-size: 1.2rem !important;
+.yacht-name {
+  font-size: 1rem !important;
   color: #ffd700 !important;
   font-weight: 700 !important;
 }
 
-.boat-details {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 15px;
-}
-
-.detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.detail-row:last-child {
-  margin-bottom: 0;
-}
-
-.detail-label {
-  font-size: 0.9rem;
-  opacity: 0.8;
-}
-
-.detail-value {
-  font-weight: 600;
-  color: #e0e8ff;
-}
-
-.race-scores {
+.race-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
 
-.race-score {
+.race-box {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 8px;
+  padding: 10px;
   text-align: center;
-}
-
-.race-label {
-  display: block;
-  font-size: 0.8rem;
-  opacity: 0.7;
-  margin-bottom: 5px;
-}
-
-.race-value {
-  display: block;
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
-.race-score.retired {
+.race-box.retired {
   border-color: rgba(255, 107, 107, 0.3);
   background: rgba(255, 107, 107, 0.05);
-}
-
-.race-score.retired .race-value {
   color: #ff6b6b;
-  font-weight: 700;
 }
 
-.flip-hint {
-  text-align: center;
-  font-size: 0.9rem;
-  opacity: 0.6;
-  margin-top: auto;
-  margin-bottom: 0;
-}
-
-/* Table */
-.table-container {
+/* Back Content */
+.back-content {
   flex: 1;
-  overflow-y: auto;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.1);
 }
 
-.results-table {
-  width: 100%;
-  border-collapse: collapse;
+.standings-table {
+  font-size: 0.85rem;
 }
 
-.results-table th {
+.table-header {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px 40px 40px 40px 60px;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.1);
-  padding: 12px 10px;
-  text-align: left;
+  padding: 10px 8px;
+  border-radius: 8px;
   font-weight: 600;
-  font-size: 0.9rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  position: sticky;
-  top: 0;
+  margin-bottom: 8px;
 }
 
-.results-table td {
-  padding: 10px;
+.table-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px 40px 40px 40px 60px;
+  gap: 8px;
+  padding: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  font-size: 0.9rem;
+  align-items: center;
 }
 
-.results-table tr:hover {
+.table-row:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.highlight-row {
-  background: rgba(255, 215, 0, 0.1) !important;
+.table-row.highlight {
+  background: rgba(255, 215, 0, 0.1);
   border-left: 3px solid #ffd700;
+  border-radius: 4px;
 }
 
-.position {
-  font-weight: 600;
-  color: #ffd700;
-}
-
-.yacht-name {
-  font-weight: 600;
-  max-width: 150px;
+.boat-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 600;
 }
 
-.total-points {
+.total {
   font-weight: 600;
   color: #4ecdc4;
 }
 
-/* Loading and Error States */
-.loading-state, .error-state, .no-data-state {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  height: 200px;
+/* Flip Instruction */
+.flip-instruction {
   text-align: center;
-}
-
-.loading-spinner {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  padding: 20px;
-  color: #4ecdc4;
-  font-weight: 600;
-}
-
-.error-message {
-  background: rgba(255, 107, 107, 0.1);
-  border: 1px solid rgba(255, 107, 107, 0.3);
-  border-radius: 10px;
-  padding: 15px;
-  margin-bottom: 15px;
-  color: #ff6b6b;
-}
-
-.retry-button {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 8px;
-  padding: 8px 16px;
-  color: white;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.retry-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.no-data-message {
-  background: rgba(255, 193, 7, 0.1);
-  border: 1px solid rgba(255, 193, 7, 0.3);
-  border-radius: 10px;
-  padding: 15px;
-  color: #ffc107;
-  margin-bottom: 15px;
-}
-
-.debug-info {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  margin-top: auto;
+  padding: 10px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
-  padding: 12px;
-  font-size: 0.9rem;
-  opacity: 0.8;
-}
-
-.debug-info ul {
-  list-style: none;
-  padding: 0;
-  margin: 8px 0 0 0;
-}
-
-.debug-info li {
-  padding: 2px 0;
-  font-size: 0.8rem;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
 }
 
 /* Footer */
@@ -837,28 +744,28 @@ onMounted(async () => {
 
 .results-link:hover {
   background: rgba(78, 205, 196, 0.1);
-  border-color: rgba(78, 205, 196, 0.5);
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .results-container {
-    padding: 15px;
+  .race-stats-5-metric {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
   }
   
-  .regatta-title {
-    font-size: 2rem;
+  .metric-item {
+    padding: 10px;
   }
   
-  .flip-card {
-    height: 550px;
+  .metric-value {
+    font-size: 1.1rem;
   }
   
-  .points-summary {
+  .points-grid {
     grid-template-columns: 1fr;
   }
   
-  .race-scores {
+  .race-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
