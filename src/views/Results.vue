@@ -124,6 +124,7 @@
                     <span>Pos</span>
                     <span>Yacht</span>
                     <span>Finish</span>
+                    <span>Elapsed</span>
                     <span>Corrected</span>
                     <span>Δ to 1st</span>
                     <span>Status</span>
@@ -142,13 +143,14 @@
                        :class="{ 'highlight': findNorthstar(boat.name) }">
                     <span>{{ boat.position || '–' }}</span>
                     <span class="boat-name">{{ boat.name || 'Unknown' }}</span>
-                    <span class="race-finish">{{ boat.finishTime || boat.elapsed || '–' }}</span>
+                    <span class="race-finish">{{ boat.finishTime || '–' }}</span>
+                    <span class="race-elapsed">{{ boat.elapsed || '–' }}</span>
                     <span class="race-corrected">{{ boat.correctedTime || boat.corrected || '–' }}</span>
                     <span class="race-delta" :class="{ 
                       'winner': boat.position === '1', 
                       'retired': /^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || '')
                     }">
-                      {{ boat.deltaToFirst || (boat.position === '1' ? '00:00:00' : '–') }}
+                      {{ formatDeltaToFirst(boat, raceResults) }}
                     </span>
                     <span class="race-status" :class="{ 
                       'finished': !/^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || ''),
@@ -336,6 +338,74 @@ const findNorthstar = (yachtName) => {
     yachtName.toUpperCase().includes('NORTHSTAR') || 
     yachtName.toUpperCase().includes('NORTHSTAR OF LONDON')
   )
+}
+
+// NEW: Format delta time to first place in mm:ss
+const formatDeltaToFirst = (boat, allRaceResults) => {
+  // Handle retired boats
+  if (/^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || '')) {
+    return 'RET'
+  }
+  
+  // Winner gets 00:00
+  if (boat.position === '1') {
+    return '00:00'
+  }
+  
+  // If deltaToFirst is already provided by API, use it
+  if (boat.deltaToFirst && boat.deltaToFirst !== '–') {
+    return boat.deltaToFirst
+  }
+  
+  // Calculate delta from corrected times
+  try {
+    const winnerTime = allRaceResults.find(b => b.position === '1')?.correctedTime || 
+                       allRaceResults.find(b => b.position === '1')?.corrected
+    const boatTime = boat.correctedTime || boat.corrected
+    
+    if (!winnerTime || !boatTime) return '–'
+    
+    // Convert time strings to seconds for calculation
+    const winnerSeconds = timeToSeconds(winnerTime)
+    const boatSeconds = timeToSeconds(boatTime)
+    
+    if (winnerSeconds === null || boatSeconds === null) return '–'
+    
+    const deltaSeconds = boatSeconds - winnerSeconds
+    if (deltaSeconds <= 0) return '00:00'
+    
+    // Format as mm:ss
+    const minutes = Math.floor(deltaSeconds / 60)
+    const seconds = deltaSeconds % 60
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    
+  } catch (e) {
+    console.error('Delta calculation error:', e)
+    return '–'
+  }
+}
+
+// Helper function to convert time string to seconds
+const timeToSeconds = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return null
+  
+  // Handle formats like "14:23:45" or "2:23:45"
+  const timeParts = timeStr.split(':')
+  if (timeParts.length === 3) {
+    const hours = parseInt(timeParts[0], 10) || 0
+    const minutes = parseInt(timeParts[1], 10) || 0
+    const seconds = parseInt(timeParts[2], 10) || 0
+    return hours * 3600 + minutes * 60 + seconds
+  }
+  
+  // Handle formats like "23:45" (mm:ss)
+  if (timeParts.length === 2) {
+    const minutes = parseInt(timeParts[0], 10) || 0
+    const seconds = parseInt(timeParts[1], 10) || 0
+    return minutes * 60 + seconds
+  }
+  
+  return null
 }
 
 // API functions
@@ -633,7 +703,7 @@ onMounted(async () => {
 .time-color { color: #4ecdc4; font-family: monospace; }
 .delta-color { color: #ff9f43; font-family: monospace; }
 
-/* Race Results Table */
+/* Race Results Table - NOW WITH 7 COLUMNS */
 .race-back-content {
   flex: 1;
 }
@@ -644,7 +714,7 @@ onMounted(async () => {
 
 .race-table-header {
   display: grid;
-  grid-template-columns: 40px 1fr 70px 60px 70px;
+  grid-template-columns: 40px 1fr 70px 70px 70px 70px 70px;
   gap: 8px;
   background: rgba(255, 255, 255, 0.1);
   padding: 10px 8px;
@@ -655,7 +725,7 @@ onMounted(async () => {
 
 .race-table-row {
   display: grid;
-  grid-template-columns: 40px 1fr 70px 60px 70px;
+  grid-template-columns: 40px 1fr 70px 70px 70px 70px 70px;
   gap: 8px;
   padding: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -672,9 +742,28 @@ onMounted(async () => {
   border-radius: 4px;
 }
 
-.race-finish, .race-corrected {
+.race-finish, .race-corrected, .race-elapsed {
   font-family: monospace;
   font-size: 0.8rem;
+}
+
+.race-delta {
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.race-delta.winner {
+  color: #ffd700;
+}
+
+.race-delta.retired {
+  color: #ff6b6b;
+}
+
+.race-delta:not(.winner):not(.retired) {
+  color: #ff9f43;
 }
 
 .race-status {
@@ -953,7 +1042,7 @@ onMounted(async () => {
   background: rgba(78, 205, 196, 0.1);
 }
 
-/* Responsive */
+/* Responsive - Updated for 7 columns */
 @media (max-width: 768px) {
   .race-stats-5-metric {
     grid-template-columns: repeat(2, 1fr);
@@ -976,15 +1065,19 @@ onMounted(async () => {
     grid-template-columns: repeat(2, 1fr);
   }
   
-  /* Race flip card responsive */
+  /* Race flip card responsive - Hide Finish column, show 6 columns */
   .race-flip-card-container {
     height: 380px;
   }
   
   .race-table-header, .race-table-row {
-    grid-template-columns: 40px 1fr 70px 60px 50px;
+    grid-template-columns: 40px 1fr 60px 60px 60px 60px;
     gap: 4px;
     font-size: 0.75rem;
+  }
+  
+  .race-finish {
+    display: none;
   }
   
   .race-card-header h3 {
@@ -1022,6 +1115,7 @@ onMounted(async () => {
     height: 360px;
   }
   
+  /* Mobile - Show only essential columns */
   .race-table-header, .race-table-row {
     grid-template-columns: 30px 1fr 50px 50px;
     gap: 4px;
