@@ -1,6 +1,5 @@
 <template>
   <div class="results-container">
-    <!-- Results.vue -->
     <!-- Header Section -->
     <header class="regatta-header">
       <div class="header-content">
@@ -226,7 +225,9 @@ const debugStatus = ref('Initializing...')
 
 // Helper functions with new names
 const flipCardToggle = () => {
+  console.log('Flip card clicked! Current state:', cardFlipped.value)
   cardFlipped.value = !cardFlipped.value
+  console.log('New flip state:', cardFlipped.value)
 }
 
 const findNorthstar = (yachtName) => {
