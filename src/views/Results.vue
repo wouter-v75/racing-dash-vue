@@ -17,7 +17,7 @@
 
     <!-- Debug Info -->
     <div class="debug-panel" style="background: rgba(255,255,255,0.1); padding: 10px; margin: 10px 0; border-radius: 8px; font-family: monospace; font-size: 0.8rem;">
-      <strong>🔧 DEBUG INFO:</strong><br>
+      <strong>DEBUG INFO:</strong><br>
       Event: {{ MAXI_EVENT_ID }} | Class: {{ MAXI_CLASS_ID }}<br>
       <strong>SERIES FLIP:</strong> {{ cardIsFlipped ? 'FLIPPED' : 'NOT FLIPPED' }} | Clicks: {{ flipClickCount }}<br>
       <strong>RACE FLIP:</strong> {{ raceCardIsFlipped ? 'FLIPPED' : 'NOT FLIPPED' }} | Clicks: {{ raceFlipClickCount }}<br>
@@ -30,141 +30,21 @@
     <!-- Test Flip Buttons -->
     <div style="margin: 10px 0;">
       <button @click="testFlip" style="background: #4ecdc4; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
-        🔄 TEST SERIES FLIP ({{ cardIsFlipped ? 'FLIPPED' : 'FRONT' }})
+        TEST SERIES FLIP ({{ cardIsFlipped ? 'FLIPPED' : 'FRONT' }})
       </button>
       <button @click="testRaceFlip" style="background: #ff6b6b; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
-        🏁 TEST RACE FLIP ({{ raceCardIsFlipped ? 'FLIPPED' : 'FRONT' }})
+        TEST RACE FLIP ({{ raceCardIsFlipped ? 'FLIPPED' : 'FRONT' }})
       </button>
       <button @click="forceShowRaceMetrics" style="background: #ffd700; color: black; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 10px;">
-        📊 FORCE SHOW RACE METRICS
+        FORCE SHOW RACE METRICS
       </button>
     </div>
 
     <!-- Main Results Section -->
     <main class="results-main">
-      <!-- Race 1 Section with FLIP CARD -->
-      <section class="latest-race-section">
-        <h2 class="section-title">🏁 RACE 1 RESULTS</h2>
-        <p class="section-subtitle">Race 1 • 09/09/2024 • CLICK CARD TO FLIP</p>
-        
-        <!-- RACE 1 FLIP CARD -->
-        <div class="race-flip-card-container" @click="testRace1Flip">
-          <div class="race-flip-card-inner" :class="{ 'flipped': race1CardIsFlipped }">
-            
-            <!-- RACE 1 FRONT SIDE - 5 Metrics -->
-            <div class="race-flip-card-front">
-              <div class="race-card-header">
-                <h3>🏁 Race 1 - NORTHSTAR Performance</h3>
-                <div class="race-flip-indicators">
-                  <span class="race-date">09/09/2024</span>
-                  <span class="race-flip-indicator">{{ race1CardIsFlipped ? 'BACK' : 'FRONT' }}</span>
-                </div>
-              </div>
-              
-              <!-- 5-Metric Display -->
-              <div class="race-stats-5-metric">
-                <div class="metric-item">
-                  <span class="metric-label">Position</span>
-                  <span class="metric-value position-color">
-                    {{ northstarRace1Result?.position || '4th' }}
-                  </span>
-                </div>
-                
-                <div class="metric-item">
-                  <span class="metric-label">Finish Time</span>
-                  <span class="metric-value time-color">
-                    {{ northstarRace1Result?.finishTime || '–' }}
-                  </span>
-                </div>
-                
-                <div class="metric-item">
-                  <span class="metric-label">Δ to 1st</span>
-                  <span class="metric-value delta-color">
-                    {{ northstarRace1Result?.deltaToFirst || '–' }}
-                  </span>
-                </div>
-                
-                <div class="metric-item">
-                  <span class="metric-label">Δ to Ahead</span>
-                  <span class="metric-value delta-color">
-                    {{ northstarRace1Result?.deltaToAhead || '–' }}
-                  </span>
-                </div>
-                
-                <div class="metric-item">
-                  <span class="metric-label">Δ to Behind</span>
-                  <span class="metric-value delta-color">
-                    {{ northstarRace1Result?.deltaToBehind || '–' }}
-                  </span>
-                </div>
-              </div>
-              
-              <div class="race-flip-instruction">🔄 CLICK TO FLIP FOR FULL RACE TABLE</div>
-            </div>
-
-            <!-- RACE 1 BACK SIDE - Full Race Results Table -->
-            <div class="race-flip-card-back">
-              <div class="race-card-header">
-                <h3>📊 Full Race 1 Results</h3>
-                <div class="race-flip-indicators">
-                  <span class="race-date">09/09/2024</span>
-                  <span class="race-flip-indicator">{{ race1CardIsFlipped ? 'BACK' : 'FRONT' }}</span>
-                </div>
-              </div>
-              
-              <div class="race-back-content">
-                <div class="race-results-table">
-                  <div class="race-table-header">
-                    <span>Pos</span>
-                    <span>Yacht</span>
-                    <span>Finish</span>
-                    <span>Elapsed</span>
-                    <span>Corrected</span>
-                    <span>Δ to 1st</span>
-                    <span>Status</span>
-                  </div>
-                  
-                  <div v-if="race1Results.length === 0" class="race-table-row">
-                    <span style="grid-column: 1 / -1; text-align: center; opacity: 0.7; padding: 20px;">
-                      {{ loadingRace1 ? 'Loading race data...' : 'No race data available' }}
-                    </span>
-                  </div>
-                  
-                  <div v-for="(boat, index) in race1Results.slice(0, 8)" 
-                       :key="`race1-boat-${index}`"
-                       class="race-table-row"
-                       :class="{ 'highlight': findNorthstar(boat.name) }">
-                    <span>{{ boat.position || '–' }}</span>
-                    <span class="boat-name">{{ boat.name || 'Unknown' }}</span>
-                    <span class="race-finish">{{ boat.finishTime || '–' }}</span>
-                    <span class="race-elapsed">{{ boat.elapsed || '–' }}</span>
-                    <span class="race-corrected">{{ boat.correctedTime || boat.corrected || '–' }}</span>
-                    <span class="race-delta" :class="{ 
-                      'winner': boat.position === '1', 
-                      'retired': /^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || '')
-                    }">
-                      {{ formatDeltaToFirst(boat, race1Results) }}
-                    </span>
-                    <span class="race-status" :class="{ 
-                      'finished': !/^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || ''),
-                      'retired': /^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || '')
-                    }">
-                      {{ /^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || '') ? 
-                         (boat.finishTime || boat.elapsed || 'RETIRED') : 'FINISHED' }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              <div class="race-flip-instruction">🔄 CLICK TO FLIP BACK TO METRICS</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- Latest Race Section with FLIP CARD -->
       <section class="latest-race-section">
-        <h2 class="section-title">🏁 LATEST RACE - R4 RESULTS</h2>
+        <h2 class="section-title">LATEST RACE - R4 RESULTS</h2>
         <p class="section-subtitle">Race 4 • 14/09/2024 • CLICK CARD TO FLIP</p>
         
         <!-- RACE FLIP CARD -->
@@ -174,7 +54,7 @@
             <!-- RACE FRONT SIDE - 5 Metrics -->
             <div class="race-flip-card-front">
               <div class="race-card-header">
-                <h3>🏁 Race R4 - NORTHSTAR Performance</h3>
+                <h3>Race R4 - NORTHSTAR Performance</h3>
                 <div class="race-flip-indicators">
                   <span class="race-date">14/09/2024</span>
                   <span class="race-flip-indicator">{{ raceCardIsFlipped ? 'BACK' : 'FRONT' }}</span>
@@ -225,13 +105,13 @@
                 </div>
               </div>
               
-              <div class="race-flip-instruction">🔄 CLICK TO FLIP FOR FULL RACE TABLE</div>
+              <div class="race-flip-instruction">CLICK TO FLIP FOR FULL RACE TABLE</div>
             </div>
 
             <!-- RACE BACK SIDE - Full Race Results Table -->
             <div class="race-flip-card-back">
               <div class="race-card-header">
-                <h3>📊 Full Race R4 Results</h3>
+                <h3>Full Race R4 Results</h3>
                 <div class="race-flip-indicators">
                   <span class="race-date">14/09/2024</span>
                   <span class="race-flip-indicator">{{ raceCardIsFlipped ? 'BACK' : 'FRONT' }}</span>
@@ -292,7 +172,7 @@
                 </div>
               </div>
               
-              <div class="race-flip-instruction">🔄 CLICK TO FLIP BACK TO METRICS</div>
+              <div class="race-flip-instruction">CLICK TO FLIP BACK TO METRICS</div>
             </div>
           </div>
         </div>
@@ -300,7 +180,7 @@
 
       <!-- SERIES FLIP CARD SECTION -->
       <section class="series-section">
-        <h2 class="section-title">🔄 SERIES RESULTS OVERALL</h2>
+        <h2 class="section-title">SERIES RESULTS OVERALL</h2>
         <p class="section-subtitle">CLICK THE CARD BELOW TO FLIP IT</p>
         
         <!-- SERIES FLIP CARD -->
@@ -310,7 +190,7 @@
             <!-- FRONT SIDE -->
             <div class="flip-card-front">
               <div class="card-header">
-                <h3>🏆 NORTHSTAR Summary</h3>
+                <h3>NORTHSTAR Summary</h3>
                 <span class="flip-indicator">{{ cardIsFlipped ? 'BACK' : 'FRONT' }}</span>
               </div>
               
@@ -339,13 +219,13 @@
                 </div>
               </div>
               
-              <div class="flip-instruction">🔄 CLICK TO FLIP FOR FULL TABLE</div>
+              <div class="flip-instruction">CLICK TO FLIP FOR FULL TABLE</div>
             </div>
 
             <!-- BACK SIDE -->
             <div class="flip-card-back">
               <div class="card-header">
-                <h3>📊 Full Standings</h3>
+                <h3>Full Standings</h3>
                 <span class="flip-indicator">{{ cardIsFlipped ? 'BACK' : 'FRONT' }}</span>
               </div>
               
@@ -376,7 +256,118 @@
                 </div>
               </div>
               
-              <div class="flip-instruction">🔄 CLICK TO FLIP BACK</div>
+              <div class="flip-instruction">CLICK TO FLIP BACK</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SIMPLE RACE 1 TEMPLATE (HEADERS ONLY) -->
+      <section class="latest-race-section">
+        <h2 class="section-title">RACE 1 RESULTS (TEMPLATE)</h2>
+        <p class="section-subtitle">Race 1 • 09/09/2024 • Headers Only</p>
+        
+        <!-- SIMPLE RACE FLIP CARD -->
+        <div class="race-flip-card-container">
+          <div class="race-flip-card-inner">
+            
+            <!-- RACE FRONT SIDE - 5 Metrics (Headers Only) -->
+            <div class="race-flip-card-front">
+              <div class="race-card-header">
+                <h3>Race 1 - NORTHSTAR Performance</h3>
+                <div class="race-flip-indicators">
+                  <span class="race-date">09/09/2024</span>
+                  <span class="race-flip-indicator">FRONT</span>
+                </div>
+              </div>
+              
+              <!-- 5-Metric Display (Static Headers) -->
+              <div class="race-stats-5-metric">
+                <div class="metric-item">
+                  <span class="metric-label">Position</span>
+                  <span class="metric-value position-color">--</span>
+                </div>
+                
+                <div class="metric-item">
+                  <span class="metric-label">Finish Time</span>
+                  <span class="metric-value time-color">--:--:--</span>
+                </div>
+                
+                <div class="metric-item">
+                  <span class="metric-label">Δ to 1st</span>
+                  <span class="metric-value delta-color">--:--</span>
+                </div>
+                
+                <div class="metric-item">
+                  <span class="metric-label">Δ to Ahead</span>
+                  <span class="metric-value delta-color">--:--</span>
+                </div>
+                
+                <div class="metric-item">
+                  <span class="metric-label">Δ to Behind</span>
+                  <span class="metric-value delta-color">--:--</span>
+                </div>
+              </div>
+              
+              <div class="race-flip-instruction">TEMPLATE - NO DATA YET</div>
+            </div>
+
+            <!-- RACE BACK SIDE - Table Headers Only -->
+            <div class="race-flip-card-back">
+              <div class="race-card-header">
+                <h3>Full Race 1 Results</h3>
+                <div class="race-flip-indicators">
+                  <span class="race-date">09/09/2024</span>
+                  <span class="race-flip-indicator">BACK</span>
+                </div>
+              </div>
+              
+              <div class="race-back-content">
+                <div class="race-results-table">
+                  <div class="race-table-header">
+                    <span>Pos</span>
+                    <span>Yacht</span>
+                    <span>Finish</span>
+                    <span>Elapsed</span>
+                    <span>Corrected</span>
+                    <span>Δ to 1st</span>
+                    <span>Status</span>
+                  </div>
+                  
+                  <!-- Template Rows (No Data) -->
+                  <div class="race-table-row">
+                    <span>1</span>
+                    <span class="boat-name">Yacht Name 1</span>
+                    <span class="race-finish">--:--:--</span>
+                    <span class="race-elapsed">--:--:--</span>
+                    <span class="race-corrected">--:--:--</span>
+                    <span class="race-delta">--:--</span>
+                    <span class="race-status">--</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>2</span>
+                    <span class="boat-name">Yacht Name 2</span>
+                    <span class="race-finish">--:--:--</span>
+                    <span class="race-elapsed">--:--:--</span>
+                    <span class="race-corrected">--:--:--</span>
+                    <span class="race-delta">--:--</span>
+                    <span class="race-status">--</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>3</span>
+                    <span class="boat-name">Yacht Name 3</span>
+                    <span class="race-finish">--:--:--</span>
+                    <span class="race-elapsed">--:--:--</span>
+                    <span class="race-corrected">--:--:--</span>
+                    <span class="race-delta">--:--</span>
+                    <span class="race-status">--</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="race-flip-instruction">TEMPLATE - NO DATA YET</div>
             </div>
           </div>
         </div>
@@ -430,17 +421,17 @@ const forceRaceDisplay = ref({
 const testFlip = () => {
   cardIsFlipped.value = !cardIsFlipped.value
   flipClickCount.value++
-  console.log('🔄 SERIES FLIP TEST:', cardIsFlipped.value, 'Clicks:', flipClickCount.value)
+  console.log('SERIES FLIP TEST:', cardIsFlipped.value, 'Clicks:', flipClickCount.value)
 }
 
 const testRaceFlip = () => {
   raceCardIsFlipped.value = !raceCardIsFlipped.value
   raceFlipClickCount.value++
-  console.log('🏁 RACE FLIP TEST:', raceCardIsFlipped.value, 'Clicks:', raceFlipClickCount.value)
+  console.log('RACE FLIP TEST:', raceCardIsFlipped.value, 'Clicks:', raceFlipClickCount.value)
 }
 
 const forceShowRaceMetrics = () => {
-  console.log('🏁 FORCING RACE METRICS DISPLAY')
+  console.log('FORCING RACE METRICS DISPLAY')
   forceRaceDisplay.value = {
     position: 'RET',
     finishTime: 'RET',
@@ -530,7 +521,7 @@ const timeToSeconds = (timeStr) => {
 // API functions
 const fetchData = async (type, additionalParams = {}) => {
   const url = `/api/results-orc?type=${type}&eventId=${MAXI_EVENT_ID}&classId=${MAXI_CLASS_ID}&${new URLSearchParams(additionalParams)}`
-  console.log('📡 API CALL:', url)
+  console.log('API CALL:', url)
   
   const response = await fetch(url)
   const data = await response.json()
@@ -554,10 +545,10 @@ const loadSeriesData = async () => {
     }
     
     seriesStatus.value = `Success (${results.length} boats)`
-    console.log('✅ Series data loaded:', results.length, 'boats')
+    console.log('Series data loaded:', results.length, 'boats')
   } catch (err) {
     seriesStatus.value = `Error: ${err.message}`
-    console.error('❌ Series error:', err)
+    console.error('Series error:', err)
   }
 }
 
@@ -580,16 +571,16 @@ const loadRaceData = async () => {
     }
     
     raceStatus.value = `Success (${results.length} boats)`
-    console.log('✅ Race data loaded:', results.length, 'boats')
+    console.log('Race data loaded:', results.length, 'boats')
   } catch (err) {
     raceStatus.value = `Error: ${err.message}`
-    console.error('❌ Race error:', err)
+    console.error('Race error:', err)
   }
 }
 
 // Initialize
 onMounted(async () => {
-  console.log('🚀 COMPONENT MOUNTED')
+  console.log('COMPONENT MOUNTED')
   
   // Load data
   await Promise.all([
@@ -606,11 +597,11 @@ onMounted(async () => {
       { position: '4', name: 'JETHOU', r1: '3.00', r2: '4.00', r3: '3.00', r4: '3.00', total: '13.00' }
     ]
     northstarResult.value = allResults.value.find(boat => findNorthstar(boat.name))
-    console.log('📋 Using fallback data')
+    console.log('Using fallback data')
   }
   
   updateTime.value = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  console.log('✅ COMPONENT READY')
+  console.log('COMPONENT READY')
 })
 </script>
 
