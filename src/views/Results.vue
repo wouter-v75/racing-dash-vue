@@ -125,48 +125,38 @@
                     <span>Yacht</span>
                     <span>Finish</span>
                     <span>Corrected</span>
+                    <span>Δ to 1st</span>
                     <span>Status</span>
                   </div>
                   
-                  <!-- Sample race results - replace with actual data -->
-                  <div class="race-table-row highlight">
-                    <span>RET</span>
-                    <span class="boat-name">NORTHSTAR OF LONDON</span>
-                    <span class="race-finish">RET</span>
-                    <span class="race-corrected">RET</span>
-                    <span class="race-status retired">RETIRED</span>
+                  <!-- REAL RACE DATA ONLY - from raceResults array -->
+                  <div v-if="raceResults.length === 0" class="race-table-row">
+                    <span style="grid-column: 1 / -1; text-align: center; opacity: 0.7; padding: 20px;">
+                      {{ loadingRace ? 'Loading race data...' : 'No race data available' }}
+                    </span>
                   </div>
                   
-                  <div class="race-table-row">
-                    <span>1</span>
-                    <span class="boat-name">PROTEUS</span>
-                    <span class="race-finish">12:45:32</span>
-                    <span class="race-corrected">12:45:32</span>
-                    <span class="race-status finished">FINISHED</span>
-                  </div>
-                  
-                  <div class="race-table-row">
-                    <span>2</span>
-                    <span class="boat-name">JOLT</span>
-                    <span class="race-finish">12:47:18</span>
-                    <span class="race-corrected">12:47:18</span>
-                    <span class="race-status finished">FINISHED</span>
-                  </div>
-                  
-                  <div class="race-table-row">
-                    <span>3</span>
-                    <span class="boat-name">JETHOU</span>
-                    <span class="race-finish">12:49:45</span>
-                    <span class="race-corrected">12:49:45</span>
-                    <span class="race-status finished">FINISHED</span>
-                  </div>
-                  
-                  <div class="race-table-row">
-                    <span>4</span>
-                    <span class="boat-name">WALLYNO</span>
-                    <span class="race-finish">12:52:12</span>
-                    <span class="race-corrected">12:52:12</span>
-                    <span class="race-status finished">FINISHED</span>
+                  <div v-for="(boat, index) in raceResults.slice(0, 8)" 
+                       :key="`race-boat-${index}`"
+                       class="race-table-row"
+                       :class="{ 'highlight': findNorthstar(boat.name) }">
+                    <span>{{ boat.position || '–' }}</span>
+                    <span class="boat-name">{{ boat.name || 'Unknown' }}</span>
+                    <span class="race-finish">{{ boat.finishTime || boat.elapsed || '–' }}</span>
+                    <span class="race-corrected">{{ boat.correctedTime || boat.corrected || '–' }}</span>
+                    <span class="race-delta" :class="{ 
+                      'winner': boat.position === '1', 
+                      'retired': /^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || '')
+                    }">
+                      {{ boat.deltaToFirst || (boat.position === '1' ? '00:00:00' : '–') }}
+                    </span>
+                    <span class="race-status" :class="{ 
+                      'finished': !/^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || ''),
+                      'retired': /^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || '')
+                    }">
+                      {{ /^(RET|DNF|DNS|DSQ|DNC)$/i.test(boat.finishTime || boat.elapsed || '') ? 
+                         (boat.finishTime || boat.elapsed || 'RETIRED') : 'FINISHED' }}
+                    </span>
                   </div>
                 </div>
                 
