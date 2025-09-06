@@ -1,5 +1,6 @@
 <template>
   <div class="results-container">
+    <!-- Results.vue -->
     <!-- Header Section -->
     <header class="regatta-header">
       <div class="header-content">
