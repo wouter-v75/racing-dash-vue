@@ -774,5 +774,60 @@ onMounted(async () => {
   .race-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+  
+  /* Race flip card responsive */
+  .race-flip-card-container {
+    height: 380px;
+  }
+  
+  .race-table-header, .race-table-row {
+    grid-template-columns: 40px 1fr 70px 60px 50px;
+    gap: 4px;
+    font-size: 0.75rem;
+  }
+  
+  .race-card-header h3 {
+    font-size: 1.1rem;
+  }
+  
+  .race-flip-instruction {
+    font-size: 0.75rem;
+    padding: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .race-stats-5-metric {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .metric-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+  }
+  
+  .metric-label {
+    margin-bottom: 0;
+  }
+  
+  .metric-value {
+    font-size: 1rem;
+  }
+  
+  .race-flip-card-container {
+    height: 360px;
+  }
+  
+  .race-table-header, .race-table-row {
+    grid-template-columns: 30px 1fr 60px;
+    gap: 4px;
+  }
+  
+  .race-finish, .race-corrected {
+    display: none;
+  }
 }
 </style>
