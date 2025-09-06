@@ -236,6 +236,7 @@ const findNorthstar = (yachtName) => {
 }
 
 // API function with explicit URL construction
+// API function with explicit URL construction
 const fetchMaxiData = async () => {
   try {
     // EXPLICIT URL construction to prevent any variable confusion
