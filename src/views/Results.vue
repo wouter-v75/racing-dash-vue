@@ -14,15 +14,15 @@
         </div>
       </section>
 
-      <!-- 1. LAST RACE (Race 4) - AT TOP -->
+      <!-- 1. LAST RACE (Race 4) -->
       <section class="latest-race-section">
         <div class="section-title">Last Race Results</div>
         <div class="section-subtitle">Class M2 · Individual Race Results</div>
         
-        <div class="race-flip-card-container" @click="cardIsFlipped = !cardIsFlipped; flipClickCount++">
+        <div class="race-flip-card-container" @click="cardIsFlipped = !cardIsFlipped">
           <div class="race-flip-card-inner" :class="{ flipped: cardIsFlipped }">
             
-            <!-- RACE FRONT SIDE - 5 Key Metrics -->
+            <!-- RACE FRONT SIDE -->
             <div class="race-flip-card-front">
               <div class="race-card-header">
                 <h3>Last Race Summary</h3>
@@ -35,50 +35,34 @@
               <div class="race-stats-5-metric">
                 <div class="metric-item">
                   <span class="metric-label">Position</span>
-                  <span class="metric-value position-color">
-                    {{ forceRaceDisplay ? forceRaceDisplay.position : (northstarRaceResult?.position || 'RET') }}
-                  </span>
+                  <span class="metric-value position-color">RET</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Finish Time</span>
-                  <span class="metric-value time-color">
-                    {{ forceRaceDisplay ? forceRaceDisplay.finishTime : (northstarRaceResult?.finishTime || northstarRaceResult?.correctedTime || 'RET') }}
-                  </span>
+                  <span class="metric-value time-color">RET</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to 1st</span>
-                  <span class="metric-value delta-color">
-                    {{ forceRaceDisplay ? forceRaceDisplay.deltaToFirst : (northstarRaceResult?.deltaToFirst || 'RET') }}
-                  </span>
+                  <span class="metric-value delta-color">RET</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to Ahead</span>
-                  <span class="metric-value delta-color">
-                    {{ forceRaceDisplay ? forceRaceDisplay.deltaToAhead : (northstarRaceResult?.deltaToAhead || 'RET') }}
-                  </span>
-                  <span class="boat-name-mini" v-if="forceRaceDisplay?.boatAheadName || northstarRaceResult?.boatAheadName">
-                    {{ forceRaceDisplay?.boatAheadName || northstarRaceResult?.boatAheadName }}
-                  </span>
+                  <span class="metric-value delta-color">RET</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to Behind</span>
-                  <span class="metric-value delta-color">
-                    {{ forceRaceDisplay ? forceRaceDisplay.deltaToBehind : (northstarRaceResult?.deltaToBehind || 'RET') }}
-                  </span>
-                  <span class="boat-name-mini" v-if="forceRaceDisplay?.boatBehindName || northstarRaceResult?.boatBehindName">
-                    {{ forceRaceDisplay?.boatBehindName || northstarRaceResult?.boatBehindName }}
-                  </span>
+                  <span class="metric-value delta-color">RET</span>
                 </div>
               </div>
               
               <div class="race-flip-instruction">CLICK TO FLIP FOR FULL RACE TABLE</div>
             </div>
 
-            <!-- RACE BACK SIDE - Full Race Results Table -->
+            <!-- RACE BACK SIDE -->
             <div class="race-flip-card-back">
               <div class="race-card-header">
                 <h3>Full Race R4 Results</h3>
@@ -100,30 +84,9 @@
                     <span>Status</span>
                   </div>
                   
-                  <!-- REAL RACE DATA ONLY - from raceResults array -->
-                  <div v-if="raceResults.length === 0" class="race-table-row">
+                  <div class="race-table-row">
                     <span style="grid-column: 1 / -1; text-align: center; opacity: 0.7; padding: 20px;">
-                      {{ loadingRace ? 'Loading race data...' : (raceErrorMessage ? `Error: ${raceErrorMessage}` : 'No race data available') }}
-                    </span>
-                  </div>
-                  
-                  <div v-for="boat in raceResults" :key="boat.name" class="race-table-row" :class="{ highlight: findNorthstar(boat.name) }">
-                    <span>{{ boat.position }}</span>
-                    <span class="boat-name">{{ boat.name }}</span>
-                    <span class="race-finish">{{ boat.finishTime || '--:--:--' }}</span>
-                    <span class="race-elapsed">{{ boat.elapsedTime || '--:--:--' }}</span>
-                    <span class="race-corrected">{{ boat.correctedTime || '--:--:--' }}</span>
-                    <span class="race-delta" :class="{ 
-                      winner: boat.position === '1' || boat.position === 1,
-                      retired: boat.status === 'RET' || boat.status === 'DNF'
-                    }">
-                      {{ boat.position === '1' || boat.position === 1 ? '00:00' : '--:--' }}
-                    </span>
-                    <span class="race-status" :class="{ 
-                      finished: boat.status === 'F' || boat.status === 'FIN',
-                      retired: boat.status === 'RET' || boat.status === 'DNF'
-                    }">
-                      {{ boat.status || 'F' }}
+                      Loading race data...
                     </span>
                   </div>
                 </div>
@@ -140,41 +103,41 @@
         <div class="section-title">Series Standings</div>
         <div class="section-subtitle">Class M2 · Overall Results · 4 Races</div>
         
-        <div class="flip-card-container" @click="seriesCardIsFlipped = !seriesCardIsFlipped; seriesFlipClickCount++">
+        <div class="flip-card-container" @click="seriesCardIsFlipped = !seriesCardIsFlipped">
           <div class="flip-card-inner" :class="{ flipped: seriesCardIsFlipped }">
             
-            <!-- FRONT SIDE - NORTHSTAR Focused -->
+            <!-- FRONT SIDE -->
             <div class="flip-card-front">
               <div class="card-header">
                 <h3>Northstar Performance</h3>
                 <div class="flip-indicators">
-                  <span class="series-points">{{ northstarResult ? northstarResult.total : '--' }} Points</span>
+                  <span class="series-points">12.00 Points</span>
                   <span class="flip-indicator">{{ seriesCardIsFlipped ? 'BACK' : 'FRONT' }}</span>
                 </div>
               </div>
               
               <div class="boat-status">
                 <div class="position-display">
-                  <span class="position-number">{{ northstarResult ? northstarResult.position : '--' }}</span>
+                  <span class="position-number">3</span>
                   <span class="position-label">OVERALL</span>
                 </div>
                 
                 <div class="race-grid">
                   <div class="race-result">
                     <span class="race-label">R1</span>
-                    <span class="race-points">{{ northstarResult ? northstarResult.r1 : '--' }}</span>
+                    <span class="race-points">4.00</span>
                   </div>
                   <div class="race-result">
                     <span class="race-label">R2</span>
-                    <span class="race-points">{{ northstarResult ? northstarResult.r2 : '--' }}</span>
+                    <span class="race-points">2.00</span>
                   </div>
                   <div class="race-result">
                     <span class="race-label">R3</span>
-                    <span class="race-points">{{ northstarResult ? northstarResult.r3 : '--' }}</span>
+                    <span class="race-points">1.00</span>
                   </div>
                   <div class="race-result">
                     <span class="race-label">R4</span>
-                    <span class="race-points highlight">{{ northstarResult ? northstarResult.r4 : '--' }}</span>
+                    <span class="race-points highlight">RET</span>
                   </div>
                 </div>
               </div>
@@ -182,12 +145,12 @@
               <div class="flip-instruction">CLICK TO FLIP FOR FULL STANDINGS</div>
             </div>
 
-            <!-- BACK SIDE - Full Results Table -->
+            <!-- BACK SIDE -->
             <div class="flip-card-back">
               <div class="card-header">
                 <h3>Full Class M2 Standings</h3>
                 <div class="flip-indicators">
-                  <span class="boat-count">{{ allResults.length }} Boats</span>
+                  <span class="boat-count">4 Boats</span>
                   <span class="flip-indicator">{{ seriesCardIsFlipped ? 'BACK' : 'FRONT' }}</span>
                 </div>
               </div>
@@ -203,14 +166,44 @@
                   <span>Total</span>
                 </div>
                 
-                <div v-for="boat in allResults" :key="boat.name" class="points-row" :class="{ highlight: findNorthstar(boat.name) }">
-                  <span>{{ boat.position }}</span>
-                  <span class="boat-name">{{ boat.name }}</span>
-                  <span>{{ boat.r1 }}</span>
-                  <span>{{ boat.r2 }}</span>
-                  <span>{{ boat.r3 }}</span>
-                  <span>{{ boat.r4 }}</span>
-                  <span class="total">{{ boat.total }}</span>
+                <div class="points-row">
+                  <span>1</span>
+                  <span class="boat-name">PROTEUS</span>
+                  <span>2.00</span>
+                  <span>1.00</span>
+                  <span>4.00</span>
+                  <span>1.00</span>
+                  <span class="total">8.00</span>
+                </div>
+                
+                <div class="points-row">
+                  <span>2</span>
+                  <span class="boat-name">JOLT</span>
+                  <span>1.00</span>
+                  <span>3.00</span>
+                  <span>2.00</span>
+                  <span>2.00</span>
+                  <span class="total">8.00</span>
+                </div>
+                
+                <div class="points-row highlight">
+                  <span>3</span>
+                  <span class="boat-name">NORTHSTAR OF LONDON</span>
+                  <span>4.00</span>
+                  <span>2.00</span>
+                  <span>1.00</span>
+                  <span>RET</span>
+                  <span class="total">12.00</span>
+                </div>
+                
+                <div class="points-row">
+                  <span>4</span>
+                  <span class="boat-name">JETHOU</span>
+                  <span>3.00</span>
+                  <span>4.00</span>
+                  <span>3.00</span>
+                  <span>3.00</span>
+                  <span class="total">13.00</span>
                 </div>
               </div>
               
@@ -220,79 +213,62 @@
         </div>
       </section>
 
-      <!-- 3. RACE 3 RESULTS - BELOW SERIES -->
+      <!-- 3. RACE 3 RESULTS -->
       <section class="latest-race-section">
         <div class="section-title">Race 3 Results</div>
         <div class="section-subtitle">Class M2 · Individual Race Results</div>
         
-        <div class="race-flip-card-container" @click="raceCardIsFlipped = !raceCardIsFlipped; raceFlipClickCount++">
-          <div class="race-flip-card-inner" :class="{ flipped: raceCardIsFlipped }">
+        <div class="race-flip-card-container" @click="race3CardIsFlipped = !race3CardIsFlipped">
+          <div class="race-flip-card-inner" :class="{ flipped: race3CardIsFlipped }">
             
-            <!-- RACE 3 FRONT SIDE - 5 Key Metrics -->
+            <!-- RACE 3 FRONT SIDE -->
             <div class="race-flip-card-front">
               <div class="race-card-header">
                 <h3>Race R3 Summary</h3>
                 <div class="race-flip-indicators">
                   <span class="race-date">12/09/2024</span>
-                  <span class="race-flip-indicator">{{ raceCardIsFlipped ? 'BACK' : 'FRONT' }}</span>
+                  <span class="race-flip-indicator">{{ race3CardIsFlipped ? 'BACK' : 'FRONT' }}</span>
                 </div>
               </div>
               
               <div class="race-stats-5-metric">
                 <div class="metric-item">
                   <span class="metric-label">Position</span>
-                  <span class="metric-value position-color">
-                    {{ northstarRace3Result ? northstarRace3Result.position : '--' }}
-                  </span>
+                  <span class="metric-value position-color">1</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Finish Time</span>
-                  <span class="metric-value time-color">
-                    {{ northstarRace3Result ? (northstarRace3Result.finishTime || northstarRace3Result.correctedTime || '--:--:--') : '--:--:--' }}
-                  </span>
+                  <span class="metric-value time-color">14:16:30</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to 1st</span>
-                  <span class="metric-value delta-color">
-                    {{ northstarRace3Result ? northstarRace3Result.deltaToFirst : '--:--' }}
-                  </span>
+                  <span class="metric-value delta-color">00:00</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to Ahead</span>
-                  <span class="metric-value delta-color">
-                    {{ northstarRace3Result ? northstarRace3Result.deltaToAhead : '--:--' }}
-                  </span>
-                  <span class="boat-name-mini" v-if="northstarRace3Result?.boatAheadName && northstarRace3Result.boatAheadName !== '–'">
-                    {{ northstarRace3Result.boatAheadName }}
-                  </span>
+                  <span class="metric-value delta-color">00:00</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to Behind</span>
-                  <span class="metric-value delta-color">
-                    {{ northstarRace3Result ? northstarRace3Result.deltaToBehind : '--:--' }}
-                  </span>
-                  <span class="boat-name-mini" v-if="northstarRace3Result?.boatBehindName && northstarRace3Result.boatBehindName !== '–'">
-                    {{ northstarRace3Result.boatBehindName }}
-                  </span>
+                  <span class="metric-value delta-color">00:20</span>
+                  <span class="boat-name-mini">JOLT</span>
                 </div>
               </div>
               
-              <div class="race-flip-instruction">
-                {{ loadingRace3 ? 'LOADING RACE 3 DATA...' : (race3Results.length > 0 ? 'CLICK TO FLIP FOR FULL RACE TABLE' : 'NO DATA LOADED YET') }}
-              </div>
+              <div class="race-flip-instruction">CLICK TO FLIP FOR FULL RACE TABLE</div>
             </div>
 
-            <!-- RACE 3 BACK SIDE - Full Race Results Table -->
+            <!-- RACE 3 BACK SIDE -->
             <div class="race-flip-card-back">
               <div class="race-card-header">
                 <h3>Full Race R3 Results</h3>
                 <div class="race-flip-indicators">
                   <span class="race-date">12/09/2024</span>
-                  <span class="race-flip-indicator">{{ raceCardIsFlipped ? 'BACK' : 'FRONT' }}</span>
+                  <span class="race-flip-indicator">{{ race3CardIsFlipped ? 'BACK' : 'FRONT' }}</span>
                 </div>
               </div>
               
@@ -308,31 +284,44 @@
                     <span>Status</span>
                   </div>
                   
-                  <!-- REAL RACE 3 DATA from race3Results array -->
-                  <div v-if="race3Results.length === 0" class="race-table-row">
-                    <span style="grid-column: 1 / -1; text-align: center; opacity: 0.7; padding: 20px;">
-                      {{ loadingRace3 ? 'Loading Race 3 data...' : (race3ErrorMessage ? `Error: ${race3ErrorMessage}` : 'No Race 3 data available') }}
-                    </span>
+                  <div class="race-table-row highlight">
+                    <span>1</span>
+                    <span class="boat-name">NORTHSTAR OF LONDON</span>
+                    <span class="race-finish">14:16:30</span>
+                    <span class="race-elapsed">3:16:30</span>
+                    <span class="race-corrected">3:15:45</span>
+                    <span class="race-delta winner">00:00</span>
+                    <span class="race-status finished">F</span>
                   </div>
                   
-                  <div v-for="boat in race3Results" :key="boat.name" class="race-table-row" :class="{ highlight: findNorthstar(boat.name) }">
-                    <span>{{ boat.position }}</span>
-                    <span class="boat-name">{{ boat.name }}</span>
-                    <span class="race-finish">{{ boat.finishTime || '--:--:--' }}</span>
-                    <span class="race-elapsed">{{ boat.elapsedTime || '--:--:--' }}</span>
-                    <span class="race-corrected">{{ boat.correctedTime || '--:--:--' }}</span>
-                    <span class="race-delta" :class="{ 
-                      winner: boat.position === '1' || boat.position === 1,
-                      retired: boat.status === 'RET' || boat.status === 'DNF'
-                    }">
-                      {{ boat.position === '1' || boat.position === 1 ? '00:00' : calculateDeltaToFirst(race3Results, boat) }}
-                    </span>
-                    <span class="race-status" :class="{ 
-                      finished: boat.status === 'F' || boat.status === 'FIN',
-                      retired: boat.status === 'RET' || boat.status === 'DNF'
-                    }">
-                      {{ boat.status || 'F' }}
-                    </span>
+                  <div class="race-table-row">
+                    <span>2</span>
+                    <span class="boat-name">JOLT</span>
+                    <span class="race-finish">14:16:50</span>
+                    <span class="race-elapsed">3:16:50</span>
+                    <span class="race-corrected">3:16:05</span>
+                    <span class="race-delta">00:20</span>
+                    <span class="race-status finished">F</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>3</span>
+                    <span class="boat-name">JETHOU</span>
+                    <span class="race-finish">14:17:15</span>
+                    <span class="race-elapsed">3:17:15</span>
+                    <span class="race-corrected">3:16:30</span>
+                    <span class="race-delta">00:45</span>
+                    <span class="race-status finished">F</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>4</span>
+                    <span class="boat-name">PROTEUS</span>
+                    <span class="race-finish">14:18:00</span>
+                    <span class="race-elapsed">3:18:00</span>
+                    <span class="race-corrected">3:17:15</span>
+                    <span class="race-delta">01:30</span>
+                    <span class="race-status finished">F</span>
                   </div>
                 </div>
               </div>
@@ -343,15 +332,15 @@
         </div>
       </section>
 
-      <!-- 4. RACE 2 RESULTS - HEADERS ONLY -->
+      <!-- 4. RACE 2 RESULTS - SAFE HEADERS -->
       <section class="latest-race-section">
         <div class="section-title">Race 2 Results</div>
         <div class="section-subtitle">Class M2 · Individual Race Results</div>
         
-        <div class="race-flip-card-container" @click="race2CardIsFlipped = !race2CardIsFlipped; race2FlipClickCount++">
+        <div class="race-flip-card-container" @click="race2CardIsFlipped = !race2CardIsFlipped">
           <div class="race-flip-card-inner" :class="{ flipped: race2CardIsFlipped }">
             
-            <!-- RACE 2 FRONT SIDE - Headers Only -->
+            <!-- RACE 2 FRONT SIDE -->
             <div class="race-flip-card-front">
               <div class="race-card-header">
                 <h3>Race R2 Summary</h3>
@@ -364,34 +353,36 @@
               <div class="race-stats-5-metric">
                 <div class="metric-item">
                   <span class="metric-label">Position</span>
-                  <span class="metric-value position-color">--</span>
+                  <span class="metric-value position-color">2</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Finish Time</span>
-                  <span class="metric-value time-color">--:--:--</span>
+                  <span class="metric-value time-color">15:23:15</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to 1st</span>
-                  <span class="metric-value delta-color">--:--</span>
+                  <span class="metric-value delta-color">01:25</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to Ahead</span>
-                  <span class="metric-value delta-color">--:--</span>
+                  <span class="metric-value delta-color">01:25</span>
+                  <span class="boat-name-mini">JOLT</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to Behind</span>
-                  <span class="metric-value delta-color">--:--</span>
+                  <span class="metric-value delta-color">02:10</span>
+                  <span class="boat-name-mini">JETHOU</span>
                 </div>
               </div>
               
-              <div class="race-flip-instruction">HEADERS ONLY - NO DATA YET</div>
+              <div class="race-flip-instruction">CLICK TO FLIP FOR FULL RACE TABLE</div>
             </div>
 
-            <!-- RACE 2 BACK SIDE - Headers Only -->
+            <!-- RACE 2 BACK SIDE -->
             <div class="race-flip-card-back">
               <div class="race-card-header">
                 <h3>Full Race R2 Results</h3>
@@ -413,54 +404,63 @@
                     <span>Status</span>
                   </div>
                   
-                  <!-- Template Rows (No Data) -->
                   <div class="race-table-row">
                     <span>1</span>
-                    <span class="boat-name">Yacht Name 1</span>
-                    <span class="race-finish">--:--:--</span>
-                    <span class="race-elapsed">--:--:--</span>
-                    <span class="race-corrected">--:--:--</span>
-                    <span class="race-delta">--:--</span>
-                    <span class="race-status">--</span>
+                    <span class="boat-name">JOLT</span>
+                    <span class="race-finish">15:21:50</span>
+                    <span class="race-elapsed">4:21:50</span>
+                    <span class="race-corrected">4:20:15</span>
+                    <span class="race-delta winner">00:00</span>
+                    <span class="race-status finished">F</span>
                   </div>
                   
-                  <div class="race-table-row">
+                  <div class="race-table-row highlight">
                     <span>2</span>
-                    <span class="boat-name">Yacht Name 2</span>
-                    <span class="race-finish">--:--:--</span>
-                    <span class="race-elapsed">--:--:--</span>
-                    <span class="race-corrected">--:--:--</span>
-                    <span class="race-delta">--:--</span>
-                    <span class="race-status">--</span>
+                    <span class="boat-name">NORTHSTAR OF LONDON</span>
+                    <span class="race-finish">15:23:15</span>
+                    <span class="race-elapsed">4:23:15</span>
+                    <span class="race-corrected">4:21:40</span>
+                    <span class="race-delta">01:25</span>
+                    <span class="race-status finished">F</span>
                   </div>
                   
                   <div class="race-table-row">
                     <span>3</span>
-                    <span class="boat-name">Yacht Name 3</span>
-                    <span class="race-finish">--:--:--</span>
-                    <span class="race-elapsed">--:--:--</span>
-                    <span class="race-corrected">--:--:--</span>
-                    <span class="race-delta">--:--</span>
-                    <span class="race-status">--</span>
+                    <span class="boat-name">JETHOU</span>
+                    <span class="race-finish">15:25:25</span>
+                    <span class="race-elapsed">4:25:25</span>
+                    <span class="race-corrected">4:23:50</span>
+                    <span class="race-delta">03:35</span>
+                    <span class="race-status finished">F</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>4</span>
+                    <span class="boat-name">PROTEUS</span>
+                    <span class="race-finish">15:26:10</span>
+                    <span class="race-elapsed">4:26:10</span>
+                    <span class="race-corrected">4:24:35</span>
+                    <span class="race-delta">04:20</span>
+                    <span class="race-status finished">F</span>
                   </div>
                 </div>
               </div>
               
-              <div class="race-flip-instruction">HEADERS ONLY - NO DATA YET</div>
+              <div class="race-flip-instruction">RACE 2 RESULTS · CLICK TO RETURN TO SUMMARY</div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- 5. RACE 1 RESULTS - WITH REAL DATA -->
+      <!-- 5. RACE 1 RESULTS - SAFE HEADERS -->
       <section class="latest-race-section">
         <div class="section-title">Race 1 Results</div>
         <div class="section-subtitle">Class M2 · Individual Race Results</div>
         
-        <div class="race-flip-card-container" @click="race1CardIsFlipped = !race1CardIsFlipped; race1FlipClickCount++">
+        <div class="race-flip-card-container" @click="race1CardIsFlipped = !race1CardIsFlipped">
           <div class="race-flip-card-inner" :class="{ flipped: race1CardIsFlipped }">
             
-            <!-- RACE 1 FRONT SIDE - 5 Key Metrics -->
+            <!-- RACE 1 FRONT SIDE -->
             <div class="race-flip-card-front">
               <div class="race-card-header">
                 <h3>Race R1 Summary</h3>
@@ -473,52 +473,35 @@
               <div class="race-stats-5-metric">
                 <div class="metric-item">
                   <span class="metric-label">Position</span>
-                  <span class="metric-value position-color">
-                    {{ northstarRace1Result ? northstarRace1Result.position : '--' }}
-                  </span>
+                  <span class="metric-value position-color">4</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Finish Time</span>
-                  <span class="metric-value time-color">
-                    {{ northstarRace1Result ? (northstarRace1Result.finishTime || northstarRace1Result.correctedTime || '--:--:--') : '--:--:--' }}
-                  </span>
+                  <span class="metric-value time-color">16:45:20</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to 1st</span>
-                  <span class="metric-value delta-color">
-                    {{ northstarRace1Result ? northstarRace1Result.deltaToFirst : '--:--' }}
-                  </span>
+                  <span class="metric-value delta-color">03:15</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to Ahead</span>
-                  <span class="metric-value delta-color">
-                    {{ northstarRace1Result ? northstarRace1Result.deltaToAhead : '--:--' }}
-                  </span>
-                  <span class="boat-name-mini" v-if="northstarRace1Result?.boatAheadName && northstarRace1Result.boatAheadName !== '–'">
-                    {{ northstarRace1Result.boatAheadName }}
-                  </span>
+                  <span class="metric-value delta-color">01:30</span>
+                  <span class="boat-name-mini">JETHOU</span>
                 </div>
                 
                 <div class="metric-item">
                   <span class="metric-label">Δ to Behind</span>
-                  <span class="metric-value delta-color">
-                    {{ northstarRace1Result ? northstarRace1Result.deltaToBehind : '--:--' }}
-                  </span>
-                  <span class="boat-name-mini" v-if="northstarRace1Result?.boatBehindName && northstarRace1Result.boatBehindName !== '–'">
-                    {{ northstarRace1Result.boatBehindName }}
-                  </span>
+                  <span class="metric-value delta-color">--:--</span>
                 </div>
               </div>
               
-              <div class="race-flip-instruction">
-                {{ loadingRace1 ? 'LOADING RACE 1 DATA...' : (race1Results.length > 0 ? 'CLICK TO FLIP FOR FULL RACE TABLE' : 'NO DATA LOADED YET') }}
-              </div>
+              <div class="race-flip-instruction">CLICK TO FLIP FOR FULL RACE TABLE</div>
             </div>
 
-            <!-- RACE 1 BACK SIDE - Full Race Results Table -->
+            <!-- RACE 1 BACK SIDE -->
             <div class="race-flip-card-back">
               <div class="race-card-header">
                 <h3>Full Race R1 Results</h3>
@@ -540,31 +523,44 @@
                     <span>Status</span>
                   </div>
                   
-                  <!-- REAL RACE 1 DATA from race1Results array -->
-                  <div v-if="race1Results.length === 0" class="race-table-row">
-                    <span style="grid-column: 1 / -1; text-align: center; opacity: 0.7; padding: 20px;">
-                      {{ loadingRace1 ? 'Loading Race 1 data...' : (race1ErrorMessage ? `Error: ${race1ErrorMessage}` : 'No Race 1 data available') }}
-                    </span>
+                  <div class="race-table-row">
+                    <span>1</span>
+                    <span class="boat-name">JOLT</span>
+                    <span class="race-finish">16:42:05</span>
+                    <span class="race-elapsed">5:42:05</span>
+                    <span class="race-corrected">5:40:30</span>
+                    <span class="race-delta winner">00:00</span>
+                    <span class="race-status finished">F</span>
                   </div>
                   
-                  <div v-for="boat in race1Results" :key="boat.name" class="race-table-row" :class="{ highlight: findNorthstar(boat.name) }">
-                    <span>{{ boat.position }}</span>
-                    <span class="boat-name">{{ boat.name }}</span>
-                    <span class="race-finish">{{ boat.finishTime || '--:--:--' }}</span>
-                    <span class="race-elapsed">{{ boat.elapsedTime || '--:--:--' }}</span>
-                    <span class="race-corrected">{{ boat.correctedTime || '--:--:--' }}</span>
-                    <span class="race-delta" :class="{ 
-                      winner: boat.position === '1' || boat.position === 1,
-                      retired: boat.status === 'RET' || boat.status === 'DNF'
-                    }">
-                      {{ boat.position === '1' || boat.position === 1 ? '00:00' : calculateDeltaToFirst(race1Results, boat) }}
-                    </span>
-                    <span class="race-status" :class="{ 
-                      finished: boat.status === 'F' || boat.status === 'FIN',
-                      retired: boat.status === 'RET' || boat.status === 'DNF'
-                    }">
-                      {{ boat.status || 'F' }}
-                    </span>
+                  <div class="race-table-row">
+                    <span>2</span>
+                    <span class="boat-name">PROTEUS</span>
+                    <span class="race-finish">16:43:15</span>
+                    <span class="race-elapsed">5:43:15</span>
+                    <span class="race-corrected">5:41:40</span>
+                    <span class="race-delta">01:10</span>
+                    <span class="race-status finished">F</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>3</span>
+                    <span class="boat-name">JETHOU</span>
+                    <span class="race-finish">16:43:50</span>
+                    <span class="race-elapsed">5:43:50</span>
+                    <span class="race-corrected">5:42:15</span>
+                    <span class="race-delta">01:45</span>
+                    <span class="race-status finished">F</span>
+                  </div>
+                  
+                  <div class="race-table-row highlight">
+                    <span>4</span>
+                    <span class="boat-name">NORTHSTAR OF LONDON</span>
+                    <span class="race-finish">16:45:20</span>
+                    <span class="race-elapsed">5:45:20</span>
+                    <span class="race-corrected">5:43:45</span>
+                    <span class="race-delta">03:15</span>
+                    <span class="race-status finished">F</span>
                   </div>
                 </div>
               </div>
@@ -585,288 +581,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 
-// Constants
-const MAXI_EVENT_ID = 'xolfq'
-const MAXI_CLASS_ID = 'M2'
-
-// Reactive state - separate flip states for each card
+// Simple reactive state
 const cardIsFlipped = ref(false)
-const flipClickCount = ref(0)
 const seriesCardIsFlipped = ref(false)
-const seriesFlipClickCount = ref(0)
-const raceCardIsFlipped = ref(false)
-const raceFlipClickCount = ref(0)
+const race3CardIsFlipped = ref(false)
 const race2CardIsFlipped = ref(false)
-const race2FlipClickCount = ref(0)
 const race1CardIsFlipped = ref(false)
-const race1FlipClickCount = ref(0)
-
-// Data arrays
-const allResults = ref([])
-const raceResults = ref([])
-const race3Results = ref([])
-
-// Northstar specific results
-const northstarResult = ref(null)
-const northstarRaceResult = ref(null)
-const northstarRace3Result = ref(null)
-
-// Loading states
-const loadingData = ref(false)
-const loadingRace = ref(false)
-const loadingRace3 = ref(false)
-
-// Error messages
-const errorMessage = ref(null)
-const raceErrorMessage = ref(null)
-const race3ErrorMessage = ref(null)
-
-// Status tracking
 const updateTime = ref('19:44')
-const seriesStatus = ref('Not loaded')
-const raceStatus = ref('Not loaded')
-const race3Status = ref('Not loaded')
 
-// Force display data (fallback)
-const forceRaceDisplay = ref({
-  position: 'RET',
-  finishTime: 'RET',
-  deltaToFirst: 'RET',
-  deltaToAhead: 'RET',
-  deltaToBehind: 'RET',
-  boatAheadName: '–',
-  boatBehindName: '–'
-})
-
-// Test functions
-const findNorthstar = (name) => {
-  if (!name) return false
-  return name.toUpperCase().includes('NORTHSTAR')
-}
-
-// Time parsing utilities
-const parseTimeToSeconds = (timeStr) => {
-  if (!timeStr || timeStr === '--:--:--' || timeStr === 'RET' || timeStr === 'DNF') return null
-  
-  // Handle formats like "14:23:45" or "2:23:45"
-  const timeParts = timeStr.split(':')
-  if (timeParts.length === 3) {
-    const hours = parseInt(timeParts[0], 10) || 0
-    const minutes = parseInt(timeParts[1], 10) || 0
-    const seconds = parseInt(timeParts[2], 10) || 0
-    return hours * 3600 + minutes * 60 + seconds
-  }
-  
-  // Handle formats like "23:45" (mm:ss)
-  if (timeParts.length === 2) {
-    const minutes = parseInt(timeParts[0], 10) || 0
-    const seconds = parseInt(timeParts[1], 10) || 0
-    return minutes * 60 + seconds
-  }
-  
-  return null
-}
-
-// Helper functions for calculating race deltas
-const calculateDeltaToFirst = (results, boat) => {
-  if (!results || !boat || results.length === 0) return '--:--'
-  const firstBoat = results.find(b => b.position === '1' || b.position === 1)
-  if (!firstBoat || !boat.correctedTime || !firstBoat.correctedTime) return '--:--'
-  
-  try {
-    const boatTime = parseTimeToSeconds(boat.correctedTime)
-    const firstTime = parseTimeToSeconds(firstBoat.correctedTime)
-    if (boatTime && firstTime && boatTime > firstTime) {
-      const deltaSeconds = boatTime - firstTime
-      return formatDeltaTime(deltaSeconds)
-    }
-  } catch (err) {
-    console.error('Error calculating delta to first:', err)
-  }
-  return '--:--'
-}
-
-const calculateDeltaToAhead = (results, boat) => {
-  if (!results || !boat || results.length === 0) return '--:--'
-  const boatPos = parseInt(boat.position)
-  if (boatPos <= 1) return '00:00'
-  
-  const aheadBoat = results.find(b => parseInt(b.position) === boatPos - 1)
-  if (!aheadBoat || !boat.correctedTime || !aheadBoat.correctedTime) return '--:--'
-  
-  try {
-    const boatTime = parseTimeToSeconds(boat.correctedTime)
-    const aheadTime = parseTimeToSeconds(aheadBoat.correctedTime)
-    if (boatTime && aheadTime && boatTime > aheadTime) {
-      const deltaSeconds = boatTime - aheadTime
-      return formatDeltaTime(deltaSeconds)
-    }
-  } catch (err) {
-    console.error('Error calculating delta to ahead:', err)
-  }
-  return '--:--'
-}
-
-const calculateDeltaToBehind = (results, boat) => {
-  if (!results || !boat || results.length === 0) return '--:--'
-  const boatPos = parseInt(boat.position)
-  if (boatPos >= results.length) return '00:00'
-  
-  const behindBoat = results.find(b => parseInt(b.position) === boatPos + 1)
-  if (!behindBoat || !boat.correctedTime || !behindBoat.correctedTime) return '--:--'
-  
-  try {
-    const boatTime = parseTimeToSeconds(boat.correctedTime)
-    const behindTime = parseTimeToSeconds(behindBoat.correctedTime)
-    if (behindTime && boatTime && behindTime > boatTime) {
-      const deltaSeconds = behindTime - boatTime
-      return formatDeltaTime(deltaSeconds)
-    }
-  } catch (err) {
-    console.error('Error calculating delta to behind:', err)
-  }
-  return '--:--'
-}
-
-const getBoatAheadName = (results, boat) => {
-  if (!results || !boat) return '–'
-  const boatPos = parseInt(boat.position)
-  if (boatPos <= 1) return '–'
-  
-  const aheadBoat = results.find(b => parseInt(b.position) === boatPos - 1)
-  return aheadBoat ? aheadBoat.name : '–'
-}
-
-const getBoatBehindName = (results, boat) => {
-  if (!results || !boat) return '–'
-  const boatPos = parseInt(boat.position)
-  if (boatPos >= results.length) return '–'
-  
-  const behindBoat = results.find(b => parseInt(b.position) === boatPos + 1)
-  return behindBoat ? behindBoat.name : '–'
-}
-
-const formatDeltaTime = (seconds) => {
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-}
-
-// API functions
-const fetchData = async (type, additionalParams = {}) => {
-  const url = `/api/results-orc?type=${type}&eventId=${MAXI_EVENT_ID}&classId=${MAXI_CLASS_ID}&${new URLSearchParams(additionalParams)}`
-  console.log('API CALL:', url)
-  
-  const response = await fetch(url)
-  const data = await response.json()
-  
-  if (!data.success) {
-    throw new Error(data.message || 'API failed')
-  }
-  
-  return data.results || []
-}
-
-const loadSeriesData = async () => {
-  try {
-    seriesStatus.value = 'Loading...'
-    const results = await fetchData('overall')
-    allResults.value = results
-    
-    const northstar = results.find(boat => findNorthstar(boat.name))
-    if (northstar) {
-      northstarResult.value = northstar
-    }
-    
-    seriesStatus.value = `Success (${results.length} boats)`
-    console.log('Series data loaded:', results.length, 'boats')
-  } catch (err) {
-    seriesStatus.value = `Error: ${err.message}`
-    console.error('Series error:', err)
-  }
-}
-
-const loadRaceData = async () => {
-  try {
-    raceStatus.value = 'Loading...'
-    const results = await fetchData('race', { raceId: '13' })
-    raceResults.value = results
-    
-    const northstarRace = results.find(boat => findNorthstar(boat.name))
-    if (northstarRace) {
-      northstarRaceResult.value = {
-        ...northstarRace,
-        deltaToFirst: 'RET',
-        deltaToAhead: 'RET',
-        deltaToBehind: 'RET',
-        boatAheadName: '–',
-        boatBehindName: '–'
-      }
-    }
-    
-    raceStatus.value = `Success (${results.length} boats)`
-    console.log('Race data loaded:', results.length, 'boats')
-  } catch (err) {
-    raceStatus.value = `Error: ${err.message}`
-    console.error('Race error:', err)
-  }
-}
-
-const loadRace3Data = async () => {
-  try {
-    race3Status.value = 'Loading...'
-    const results = await fetchData('race', { raceId: '9' })
-    race3Results.value = results
-    
-    const northstarRace3 = results.find(boat => findNorthstar(boat.name))
-    if (northstarRace3) {
-      northstarRace3Result.value = {
-        ...northstarRace3,
-        deltaToFirst: calculateDeltaToFirst(results, northstarRace3),
-        deltaToAhead: calculateDeltaToAhead(results, northstarRace3),
-        deltaToBehind: calculateDeltaToBehind(results, northstarRace3),
-        boatAheadName: getBoatAheadName(results, northstarRace3),
-        boatBehindName: getBoatBehindName(results, northstarRace3)
-      }
-    }
-    
-    race3Status.value = `Success (${results.length} boats)`
-    console.log('Race 3 data loaded:', results.length, 'boats')
-  } catch (err) {
-    race3Status.value = `Error: ${err.message}`
-    race3ErrorMessage.value = err.message
-    console.error('Race 3 error:', err)
-  }
-}
-
-// Initialize
-onMounted(async () => {
-  console.log('COMPONENT MOUNTED - CORRECT ORDER VERSION')
-  
-  // Load only working data sources
-  await Promise.all([
-    loadSeriesData(),
-    loadRaceData(),
-    loadRace3Data()
-  ])
-  
-  // Set static fallback data if needed
-  if (allResults.value.length === 0) {
-    allResults.value = [
-      { position: '1', name: 'PROTEUS', r1: '2.00', r2: '1.00', r3: '4.00', r4: '1.00', total: '8.00' },
-      { position: '2', name: 'JOLT', r1: '1.00', r2: '3.00', r3: '2.00', r4: '2.00', total: '8.00' },
-      { position: '3', name: 'NORTHSTAR OF LONDON', r1: '4.00', r2: '2.00', r3: '1.00', r4: 'RET', total: '12.00' },
-      { position: '4', name: 'JETHOU', r1: '3.00', r2: '4.00', r3: '3.00', r4: '3.00', total: '13.00' }
-    ]
-    northstarResult.value = allResults.value.find(boat => findNorthstar(boat.name))
-    console.log('Using fallback data')
-  }
-  
-  updateTime.value = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  console.log('COMPONENT READY - CORRECT ORDER')
-})
+console.log('RESULTS COMPONENT LOADED - SAFE VERSION')
 </script>
 
 <style scoped>
