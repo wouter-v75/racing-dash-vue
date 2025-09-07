@@ -85,9 +85,43 @@
                   </div>
                   
                   <div class="race-table-row">
-                    <span style="grid-column: 1 / -1; text-align: center; opacity: 0.7; padding: 20px;">
-                      Loading race data...
-                    </span>
+                    <span>1</span>
+                    <span class="boat-name">PROTEUS</span>
+                    <span class="race-finish">15:42:30</span>
+                    <span class="race-elapsed">4:42:30</span>
+                    <span class="race-corrected">4:40:55</span>
+                    <span class="race-delta winner">00:00</span>
+                    <span class="race-status finished">F</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>2</span>
+                    <span class="boat-name">JOLT</span>
+                    <span class="race-finish">15:43:15</span>
+                    <span class="race-elapsed">4:43:15</span>
+                    <span class="race-corrected">4:41:40</span>
+                    <span class="race-delta">00:45</span>
+                    <span class="race-status finished">F</span>
+                  </div>
+                  
+                  <div class="race-table-row">
+                    <span>3</span>
+                    <span class="boat-name">JETHOU</span>
+                    <span class="race-finish">15:44:50</span>
+                    <span class="race-elapsed">4:44:50</span>
+                    <span class="race-corrected">4:43:15</span>
+                    <span class="race-delta">02:20</span>
+                    <span class="race-status finished">F</span>
+                  </div>
+                  
+                  <div class="race-table-row highlight">
+                    <span>RET</span>
+                    <span class="boat-name">NORTHSTAR OF LONDON</span>
+                    <span class="race-finish">RET</span>
+                    <span class="race-elapsed">RET</span>
+                    <span class="race-corrected">RET</span>
+                    <span class="race-delta retired">RET</span>
+                    <span class="race-status retired">RET</span>
                   </div>
                 </div>
               </div>
