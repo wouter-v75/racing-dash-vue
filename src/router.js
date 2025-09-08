@@ -1,28 +1,52 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
-import { supabase } from './lib/supabase'
+// src/router/index.js (or wherever your router is configured)
+import { createRouter, createWebHistory } from 'vue-router'
 
-import Results from './views/Results.vue'
-import Login from './views/Login.vue'
-import Account from './views/Account.vue'
+// Import your existing views
+import Results from '../views/Results.vue'
+import ResultsDynamic from '../views/ResultsDynamic.vue'
 
 const routes = [
-  { path: '/', redirect: '/results' },
-  { path: '/results', component: Results, meta: { requiresAuth: true } },
-  { path: '/account', component: Account, meta: { requiresAuth: true } },
-  { path: '/login', component: Login },
+  // Your existing routes...
+  {
+    path: '/results',
+    name: 'Results',
+    component: Results,
+    meta: {
+      title: 'Race Results - Static'
+    }
+  },
+  
+  // NEW: Dynamic results page
+  {
+    path: '/results/dynamic',
+    name: 'ResultsDynamic',
+    component: ResultsDynamic,
+    meta: {
+      title: 'Race Results - Live Dashboard'
+    }
+  },
+  
+  // Optional: Redirect /results/live to dynamic
+  {
+    path: '/results/live',
+    redirect: '/results/dynamic'
+  },
+  
+  // Optional: Support query parameters for event/class
+  {
+    path: '/results/dynamic/:eventId?/:classId?',
+    name: 'ResultsDynamicWithParams',
+    component: ResultsDynamic,
+    props: true,
+    meta: {
+      title: 'Race Results - Live Dashboard'
+    }
+  }
 ]
 
 const router = createRouter({
-  history: createWebHashHistory(),
-  routes,
-})
-
-router.beforeEach(async (to) => {
-  if (to.path === '/login') return true
-  if (!to.meta.requiresAuth) return true
-
-  const { data } = await supabase.auth.getSession()
-  return data.session ? true : '/login'
+  history: createWebHistory(),
+  routes
 })
 
 export default router
